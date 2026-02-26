@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="feat: visual insertion gap during drag-and-drop reordering&#10;&#10;- Custom _DropIndicatorDelegate inflates sizeHint to open a gap&#10;- Blue-tinted insertion zone with horizontal line and dot endpoints&#10;- Gap tracks cursor position with top/bottom half hit-testing&#10;- Hides gap when hovering over dragged item's own position&#10;- Gap also shown for external OS file drops&#10;- Disables Qt's built-in drop indicator line" />
+    <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="feat: output options dialog with page numbers and watermark&#10;&#10;- PageNumberOptions, WatermarkOptions, OutputOptions dataclasses in model&#10;- _apply_page_numbers stamps formatted numbers at 6 positions with alignment&#10;- _apply_watermark stamps rotated semi-transparent text via matrix transform&#10;- merge() accepts optional OutputOptions, applies after assembly&#10;- OutputOptionsDialog with Page Numbers and Watermark tabs&#10;- Editable format presets, opacity slider, color dropdown, position picker&#10;- Options button in bottom bar, settings persist within session&#10;- Errors in stamp application captured as warnings, not fatal" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -66,7 +66,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1772107516868</updated>
-      <workItem from="1772107517890" duration="1868000" />
+      <workItem from="1772107517890" duration="2255000" />
     </task>
     <task id="LOCAL-00001" summary="feat: project scaffolding and minimal window launch&#10;&#10;- Create pdfjoiner package with __init__, model, service, view stubs&#10;- Add main.py entry point with PySide6 QApplication bootstrap&#10;- Add pyproject.toml with project metadata and dependencies&#10;- Add requirements.txt (PySide6, PyMuPDF)&#10;- Add .gitignore for Python/IDE/OS artifacts&#10;- Minimal MainWindow launches at 900x600 with placeholder label">
       <option name="closed" value="true" />
@@ -132,7 +132,15 @@
       <option name="project" value="LOCAL" />
       <updated>1772109392330</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="feat: output options dialog with page numbers and watermark&#10;&#10;- PageNumberOptions, WatermarkOptions, OutputOptions dataclasses in model&#10;- _apply_page_numbers stamps formatted numbers at 6 positions with alignment&#10;- _apply_watermark stamps rotated semi-transparent text via matrix transform&#10;- merge() accepts optional OutputOptions, applies after assembly&#10;- OutputOptionsDialog with Page Numbers and Watermark tabs&#10;- Editable format presets, opacity slider, color dropdown, position picker&#10;- Options button in bottom bar, settings persist within session&#10;- Errors in stamp application captured as warnings, not fatal">
+      <option name="closed" value="true" />
+      <created>1772109788360</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1772109788360</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -146,6 +154,7 @@
     <MESSAGE value="feat: add preview panel with page navigation and merged preview&#10;&#10;- PreviewPanel widget with single-file and merged preview modes&#10;- Single-file: renders current page, Prev/Next navigation for PDFs&#10;- Merged: renders all included pages stacked vertically, scrollable&#10;- Preview Merged button in bottom bar&#10;- Auto-preview on file list selection change" />
     <MESSAGE value="feat: add drag-and-drop reordering and OS file drops&#10;&#10;- FileListWidget subclass with internal drag reorder via model&#10;- External file/folder drops from OS file manager onto file list&#10;- Main window also accepts drops anywhere (toolbar, preview, etc.)&#10;- Folders recursively scanned, unsupported files silently skipped&#10;- Status bar hints at drag-and-drop in empty state" />
     <MESSAGE value="feat: visual insertion gap during drag-and-drop reordering&#10;&#10;- Custom _DropIndicatorDelegate inflates sizeHint to open a gap&#10;- Blue-tinted insertion zone with horizontal line and dot endpoints&#10;- Gap tracks cursor position with top/bottom half hit-testing&#10;- Hides gap when hovering over dragged item's own position&#10;- Gap also shown for external OS file drops&#10;- Disables Qt's built-in drop indicator line" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: visual insertion gap during drag-and-drop reordering&#10;&#10;- Custom _DropIndicatorDelegate inflates sizeHint to open a gap&#10;- Blue-tinted insertion zone with horizontal line and dot endpoints&#10;- Gap tracks cursor position with top/bottom half hit-testing&#10;- Hides gap when hovering over dragged item's own position&#10;- Gap also shown for external OS file drops&#10;- Disables Qt's built-in drop indicator line" />
+    <MESSAGE value="feat: output options dialog with page numbers and watermark&#10;&#10;- PageNumberOptions, WatermarkOptions, OutputOptions dataclasses in model&#10;- _apply_page_numbers stamps formatted numbers at 6 positions with alignment&#10;- _apply_watermark stamps rotated semi-transparent text via matrix transform&#10;- merge() accepts optional OutputOptions, applies after assembly&#10;- OutputOptionsDialog with Page Numbers and Watermark tabs&#10;- Editable format presets, opacity slider, color dropdown, position picker&#10;- Options button in bottom bar, settings persist within session&#10;- Errors in stamp application captured as warnings, not fatal" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: output options dialog with page numbers and watermark&#10;&#10;- PageNumberOptions, WatermarkOptions, OutputOptions dataclasses in model&#10;- _apply_page_numbers stamps formatted numbers at 6 positions with alignment&#10;- _apply_watermark stamps rotated semi-transparent text via matrix transform&#10;- merge() accepts optional OutputOptions, applies after assembly&#10;- OutputOptionsDialog with Page Numbers and Watermark tabs&#10;- Editable format presets, opacity slider, color dropdown, position picker&#10;- Options button in bottom bar, settings persist within session&#10;- Errors in stamp application captured as warnings, not fatal" />
   </component>
 </project>

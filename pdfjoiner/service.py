@@ -50,79 +50,98 @@ def _page_to_pixmap(
 
 # ── Post-merge page stamping ──────────────────────────────────
 
+# A standard A4 page is ~595 × 842 points. User-facing font sizes and
+# margins are authored for this reference size and scaled proportionally
+# for pages of different dimensions (e.g. high-res images).
+_REF_PAGE_HEIGHT = 842.0
+
+
+def _scale_for_page(page: fitz.Page) -> float:
+    """Return a multiplier that scales reference-size values to this page."""
+    return page.rect.height / _REF_PAGE_HEIGHT
+
 
 def _apply_page_numbers(doc: fitz.Document, opts: PageNumberOptions) -> None:
-    """Stamp page numbers onto every page of the document."""
+    """Stamp page numbers onto every page of the document.
+
+    Font size and margin are scaled relative to each page's height so
+    numbers are legible regardless of whether the page is A4, Letter,
+    or a high-resolution image.
+    """
     if not opts.enabled:
         return
 
     total = doc.page_count
+    font = fitz.Font("helv")
 
     for i, page in enumerate(doc):
         number = opts.start + i
         text = opts.format.replace("{n}", str(number)).replace("{total}", str(total))
 
         rect = page.rect
-        margin = opts.margin
-        font_size = opts.font_size
+        scale = _scale_for_page(page)
+        font_size = opts.font_size * scale
+        margin = opts.margin * scale
 
-        # Calculate insertion point based on position
+        # Vertical position
         pos = opts.position
         if "bottom" in pos:
             y = rect.height - margin
         else:  # top
             y = margin + font_size
 
+        # Horizontal position
+        text_width = font.text_length(text, fontsize=font_size)
+
         if "left" in pos:
             x = margin
-            align = fitz.TEXT_ALIGN_LEFT
         elif "right" in pos:
-            x = rect.width - margin
-            align = fitz.TEXT_ALIGN_RIGHT
+            x = rect.width - margin - text_width
         else:  # center
-            x = rect.width / 2
-            align = fitz.TEXT_ALIGN_CENTER
+            x = (rect.width - text_width) / 2
 
-        # Use a text writer for proper alignment
+        # Clamp so text never lands outside the page
+        x = max(0, min(x, rect.width - text_width))
+        y = max(font_size, min(y, rect.height))
+
         tw = fitz.TextWriter(page.rect)
-        font = fitz.Font("helv")
-
-        # For center/right alignment, measure text width and adjust x
-        text_width = font.text_length(text, fontsize=font_size)
-        if align == fitz.TEXT_ALIGN_CENTER:
-            x -= text_width / 2
-        elif align == fitz.TEXT_ALIGN_RIGHT:
-            x -= text_width
-
         tw.append((x, y), text, font=font, fontsize=font_size)
         tw.write_text(page, color=opts.color)
 
 
 def _apply_watermark(doc: fitz.Document, opts: WatermarkOptions) -> None:
-    """Stamp diagonal watermark text onto every page of the document."""
+    """Stamp diagonal watermark text onto every page of the document.
+
+    Font size is scaled relative to each page's height so the watermark
+    is proportionally sized on every page.
+    """
     if not opts.enabled or not opts.text.strip():
         return
 
+    font = fitz.Font("helv")
+    angle_rad = math.radians(opts.angle)
+    cos_a = math.cos(angle_rad)
+    sin_a = math.sin(angle_rad)
+
     for page in doc:
         rect = page.rect
+        scale = _scale_for_page(page)
+        font_size = opts.font_size * scale
+
         center_x = rect.width / 2
         center_y = rect.height / 2
 
-        # Create a temporary text to measure its width
-        font = fitz.Font("helv")
-        text_width = font.text_length(opts.text, fontsize=opts.font_size)
+        text_width = font.text_length(opts.text, fontsize=font_size)
 
-        # Build a rotation matrix: translate to center, rotate, translate back
-        angle_rad = math.radians(opts.angle)
+        # Build transform: place text at origin, then rotate + translate to center
         mat = (
-            fitz.Matrix(1, 0, 0, 1, center_x, center_y)  # translate to center
-            * fitz.Matrix(math.cos(angle_rad), math.sin(angle_rad),
-                          -math.sin(angle_rad), math.cos(angle_rad), 0, 0)  # rotate
-            * fitz.Matrix(1, 0, 0, 1, -text_width / 2, opts.font_size / 3)  # center text
+            fitz.Matrix(1, 0, 0, 1, center_x, center_y)
+            * fitz.Matrix(cos_a, sin_a, -sin_a, cos_a, 0, 0)
+            * fitz.Matrix(1, 0, 0, 1, -text_width / 2, font_size / 3)
         )
 
         tw = fitz.TextWriter(page.rect, opacity=opts.opacity)
-        tw.append((0, 0), opts.text, font=font, fontsize=opts.font_size)
+        tw.append((0, 0), opts.text, font=font, fontsize=font_size)
         tw.write_text(page, morph=(fitz.Point(0, 0), mat), color=opts.color)
 
 
