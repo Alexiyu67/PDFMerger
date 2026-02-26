@@ -323,13 +323,28 @@ class FileListWidget(QListWidget):
 class AnnotatedPageWidget(QWidget):
     """Displays a single rendered page with annotation overlays.
 
-    In merged preview mode, clicking on the page emits *clicked* with
-    the page index and normalised (0–1) coordinates so an annotation
-    can be placed at that position.
+    Supports selecting, dragging, editing, and deleting annotations.
+
+    Interactions:
+    - Left-click on empty space  → ``clicked`` signal (create new)
+    - Left-click on annotation   → select it
+    - Drag a selected annotation → move it, then ``annotation_moved``
+    - Double-click annotation    → ``annotation_edit_requested``
+    - Delete / Backspace key     → ``annotation_delete_requested``
+    - Right-click annotation     → context menu (Edit / Delete)
     """
 
-    # (page_index, x_ratio, y_ratio)
+    # Click on empty space → create new annotation
     clicked = Signal(int, float, float)
+    # Annotation was dragged to a new position (already mutated)
+    annotation_moved = Signal(object)
+    # User wants to edit an annotation (double-click or context menu)
+    annotation_edit_requested = Signal(object)
+    # User wants to delete an annotation (Delete key or context menu)
+    annotation_delete_requested = Signal(object)
+
+    _SELECTION_COLOR = QColor(0, 120, 215)  # Windows-style accent blue
+    _HIT_PAD = 6.0  # extra pixels around text rect for easier clicking
 
     def __init__(
         self,
@@ -344,79 +359,252 @@ class AnnotatedPageWidget(QWidget):
         self._annotations = annotations
         self.setFixedSize(pixmap.size())
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.setMouseTracking(True)
+
+        # Selection / drag state
+        self._selected: Optional[TextAnnotation] = None
+        self._dragging: bool = False
+        self._drag_offset_x: float = 0.0
+        self._drag_offset_y: float = 0.0
+
+        # Cached hit-rects (rebuilt every paint)
+        self._hit_rects: List[tuple] = []  # [(QRectF, TextAnnotation), ...]
+
+    @property
+    def selected(self) -> Optional[TextAnnotation]:
+        return self._selected
+
+    def set_selected(self, ann: Optional[TextAnnotation]) -> None:
+        if self._selected is not ann:
+            self._selected = ann
+            self.update()
 
     def set_annotations(self, annotations: List[TextAnnotation]) -> None:
         self._annotations = annotations
+        # Clear selection if it no longer exists
+        if self._selected not in annotations:
+            self._selected = None
         self.update()
+
+    # ── Geometry helpers ───────────────────────────────────────
+
+    def _ann_rect(self, ann: TextAnnotation) -> QRectF:
+        """Compute the bounding rect for an annotation in widget pixels."""
+        pw = self._pixmap.width()
+        ph = self._pixmap.height()
+        x = ann.x_ratio * pw
+        y = ann.y_ratio * ph
+
+        scale = ph / 842.0
+        font_size = max(8.0, ann.font_size * scale)
+        font = QFont("Helvetica", int(font_size))
+        fm = QFontMetricsF(font)
+        text_rect = fm.boundingRect(ann.text)
+        pad = 3.0 + self._HIT_PAD
+
+        return QRectF(
+            x - pad,
+            y - text_rect.height() - pad,
+            text_rect.width() + 2 * pad,
+            text_rect.height() + 2 * pad,
+        )
+
+    def _hit_test(self, pos: QPointF) -> Optional[TextAnnotation]:
+        """Return the top-most annotation under *pos*, or None."""
+        # Iterate in reverse so top-drawn (last) annotations are hit first
+        for rect, ann in reversed(self._hit_rects):
+            if rect.contains(pos):
+                return ann
+        return None
+
+    # ── Paint ──────────────────────────────────────────────────
 
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Draw the base page image
         painter.drawPixmap(0, 0, self._pixmap)
 
         pw = self._pixmap.width()
         ph = self._pixmap.height()
+        self._hit_rects = []
 
         for ann in self._annotations:
             if not ann.text.strip():
                 continue
 
-            # Map normalised coords → pixel coords in the widget
             x = ann.x_ratio * pw
             y = ann.y_ratio * ph
-
-            # Scale font size relative to widget height (same logic as service)
             scale = ph / 842.0
             font_size = max(8.0, ann.font_size * scale)
 
             font = QFont("Helvetica", int(font_size))
             painter.setFont(font)
             fm = QFontMetricsF(font)
-
             text_rect = fm.boundingRect(ann.text)
             pad = 3.0
 
-            # Background pill behind text
             bg_rect = QRectF(
                 x - pad,
                 y - text_rect.height() - pad,
                 text_rect.width() + 2 * pad,
                 text_rect.height() + 2 * pad,
             )
+
             r, g, b = ann.color
-            bg_color = QColor.fromRgbF(r, g, b, 0.12)
+            is_sel = ann is self._selected
+
+            # Background pill
+            bg_alpha = 0.22 if is_sel else 0.12
+            bg_color = QColor.fromRgbF(r, g, b, bg_alpha)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(bg_color))
             painter.drawRoundedRect(bg_rect, 3, 3)
+
+            # Selection highlight border
+            if is_sel:
+                sel_pen = QPen(self._SELECTION_COLOR, 2.0, Qt.PenStyle.DashLine)
+                painter.setPen(sel_pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                hit_rect = bg_rect.adjusted(
+                    -self._HIT_PAD, -self._HIT_PAD, self._HIT_PAD, self._HIT_PAD
+                )
+                painter.drawRoundedRect(hit_rect, 4, 4)
 
             # Text
             text_color = QColor.fromRgbF(r, g, b)
             painter.setPen(QPen(text_color))
             painter.drawText(QPointF(x, y), ann.text)
 
-            # Small marker dot
+            # Marker dot
             painter.setBrush(QBrush(text_color))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(QPointF(x, y), 3, 3)
 
+            # Store hit rect for click testing
+            self._hit_rects.append((self._ann_rect(ann), ann))
+
         painter.end()
 
+    # ── Mouse events ───────────────────────────────────────────
+
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        pos = event.position()
+
         if event.button() == Qt.MouseButton.LeftButton:
-            pos = event.position()
+            hit = self._hit_test(pos)
+            if hit is not None:
+                # Select the annotation and prepare for potential drag
+                self._selected = hit
+                self._dragging = False
+                pw = self._pixmap.width()
+                ph = self._pixmap.height()
+                self._drag_offset_x = pos.x() - hit.x_ratio * pw
+                self._drag_offset_y = pos.y() - hit.y_ratio * ph
+                self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
+                self.update()
+            else:
+                # Deselect, then signal for new annotation
+                self._selected = None
+                self.update()
+                pw = self._pixmap.width()
+                ph = self._pixmap.height()
+                if pw > 0 and ph > 0:
+                    x_ratio = max(0.0, min(1.0, pos.x() / pw))
+                    y_ratio = max(0.0, min(1.0, pos.y() / ph))
+                    self.clicked.emit(self._page_index, x_ratio, y_ratio)
+
+        elif event.button() == Qt.MouseButton.RightButton:
+            hit = self._hit_test(pos)
+            if hit is not None:
+                self._selected = hit
+                self.update()
+                self._show_context_menu(event.globalPosition().toPoint(), hit)
+
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        pos = event.position()
+
+        if self._selected is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            # Start or continue dragging
+            self._dragging = True
             pw = self._pixmap.width()
             ph = self._pixmap.height()
             if pw > 0 and ph > 0:
-                x_ratio = max(0.0, min(1.0, pos.x() / pw))
-                y_ratio = max(0.0, min(1.0, pos.y() / ph))
-                self.clicked.emit(self._page_index, x_ratio, y_ratio)
-        super().mousePressEvent(event)
+                new_x = (pos.x() - self._drag_offset_x) / pw
+                new_y = (pos.y() - self._drag_offset_y) / ph
+                self._selected.x_ratio = max(0.0, min(1.0, new_x))
+                self._selected.y_ratio = max(0.0, min(1.0, new_y))
+                self.update()
+        else:
+            # Update cursor based on hover
+            hit = self._hit_test(pos)
+            if hit is not None:
+                self.setCursor(QCursor(Qt.CursorShape.OpenHandCursor))
+            else:
+                self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self._dragging and self._selected is not None:
+                self._dragging = False
+                self.annotation_moved.emit(self._selected)
+            # Restore cursor
+            hit = self._hit_test(event.position())
+            if hit is not None:
+                self.setCursor(QCursor(Qt.CursorShape.OpenHandCursor))
+            else:
+                self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            hit = self._hit_test(event.position())
+            if hit is not None:
+                self._selected = hit
+                self.update()
+                self.annotation_edit_requested.emit(hit)
+                return
+        super().mouseDoubleClickEvent(event)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if self._selected is not None and event.key() in (
+            Qt.Key.Key_Delete, Qt.Key.Key_Backspace
+        ):
+            self.annotation_delete_requested.emit(self._selected)
+            return
+        super().keyPressEvent(event)
+
+    # ── Context menu ───────────────────────────────────────────
+
+    def _show_context_menu(self, global_pos, ann: TextAnnotation) -> None:
+        from PySide6.QtWidgets import QMenu
+
+        menu = QMenu(self)
+        act_edit = menu.addAction("Edit Annotation…")
+        act_delete = menu.addAction("Delete Annotation")
+
+        chosen = menu.exec(global_pos)
+        if chosen is act_edit:
+            self.annotation_edit_requested.emit(ann)
+        elif chosen is act_delete:
+            self.annotation_delete_requested.emit(ann)
 
 
 class AnnotationDialog(QDialog):
-    """Small dialog for entering text annotation details."""
+    """Dialog for creating or editing a text annotation."""
+
+    _COLOR_MAP = {
+        "Black": (0.0, 0.0, 0.0),
+        "Red": (0.8, 0.0, 0.0),
+        "Blue": (0.0, 0.0, 0.8),
+        "Green": (0.0, 0.5, 0.0),
+        "Gray": (0.5, 0.5, 0.5),
+    }
 
     def __init__(
         self,
@@ -424,32 +612,37 @@ class AnnotationDialog(QDialog):
         x_ratio: float,
         y_ratio: float,
         parent: Optional[QWidget] = None,
+        *,
+        existing: Optional[TextAnnotation] = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"Add Annotation — Page {page_index + 1}")
+        editing = existing is not None
+        title = "Edit Annotation" if editing else "Add Annotation"
+        self.setWindowTitle(f"{title} — Page {page_index + 1}")
         self.setMinimumWidth(340)
 
         layout = QFormLayout(self)
 
         self._text = QLineEdit()
         self._text.setPlaceholderText("Enter annotation text…")
+        if editing:
+            self._text.setText(existing.text)
         layout.addRow("Text:", self._text)
 
         self._font_size = QDoubleSpinBox()
         self._font_size.setRange(6.0, 72.0)
-        self._font_size.setValue(12.0)
+        self._font_size.setValue(existing.font_size if editing else 12.0)
         self._font_size.setSuffix(" pt")
         layout.addRow("Font size:", self._font_size)
 
         self._color = QComboBox()
-        self._color_map = {
-            "Black": (0.0, 0.0, 0.0),
-            "Red": (0.8, 0.0, 0.0),
-            "Blue": (0.0, 0.0, 0.8),
-            "Green": (0.0, 0.5, 0.0),
-            "Gray": (0.5, 0.5, 0.5),
-        }
-        self._color.addItems(list(self._color_map.keys()))
+        self._color.addItems(list(self._COLOR_MAP.keys()))
+        if editing:
+            # Select the matching color, or default to Black
+            for name, rgb in self._COLOR_MAP.items():
+                if rgb == existing.color:
+                    self._color.setCurrentText(name)
+                    break
         layout.addRow("Color:", self._color)
 
         pos_text = f"({x_ratio:.0%}, {y_ratio:.0%})"
@@ -465,6 +658,7 @@ class AnnotationDialog(QDialog):
         layout.addRow(buttons)
 
         self._text.setFocus()
+        self._text.selectAll()
 
     def get_annotation(self, page_index: int, x_ratio: float, y_ratio: float) -> TextAnnotation:
         """Build a TextAnnotation from the dialog state."""
@@ -475,7 +669,7 @@ class AnnotationDialog(QDialog):
             y_ratio=y_ratio,
             text=self._text.text().strip(),
             font_size=self._font_size.value(),
-            color=self._color_map.get(color_name, (0.0, 0.0, 0.0)),
+            color=self._COLOR_MAP.get(color_name, (0.0, 0.0, 0.0)),
         )
 
 
@@ -487,8 +681,12 @@ class AnnotationDialog(QDialog):
 class PreviewPanel(QFrame):
     """Right-side panel: single-file preview with page nav, or merged preview."""
 
-    # Emitted when user clicks on a page in merged preview to add annotation
+    # Emitted when user clicks on empty space to add annotation
     annotation_requested = Signal(int, float, float)  # page_index, x_ratio, y_ratio
+    # Forwarded from AnnotatedPageWidget for annotation management
+    annotation_moved = Signal(object)
+    annotation_edit_requested = Signal(object)
+    annotation_delete_requested = Signal(object)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -583,10 +781,13 @@ class PreviewPanel(QFrame):
             page_anns = [a for a in all_annotations if a.page == i]
             page_widget = AnnotatedPageWidget(pix, i, page_anns)
             page_widget.clicked.connect(self.annotation_requested)
+            page_widget.annotation_moved.connect(self.annotation_moved)
+            page_widget.annotation_edit_requested.connect(self.annotation_edit_requested)
+            page_widget.annotation_delete_requested.connect(self.annotation_delete_requested)
             self._page_layout.addWidget(page_widget)
             self._page_widgets.append(page_widget)
 
-            num_label = QLabel(f"— Page {i + 1} —  (click to annotate)")
+            num_label = QLabel(f"— Page {i + 1} —  (click to add, drag to move, double-click to edit)")
             num_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             num_label.setStyleSheet("color: #888; font-size: 11px;")
             self._page_layout.addWidget(num_label)
@@ -1011,6 +1212,9 @@ class MainWindow(QMainWindow):
         # Right panel — preview
         self._preview = PreviewPanel()
         self._preview.annotation_requested.connect(self._on_annotation_requested)
+        self._preview.annotation_moved.connect(self._on_annotation_moved)
+        self._preview.annotation_edit_requested.connect(self._on_annotation_edit)
+        self._preview.annotation_delete_requested.connect(self._on_annotation_delete)
         self._splitter.addWidget(self._preview)
 
         self._splitter.setSizes([400, 500])
@@ -1261,6 +1465,46 @@ class MainWindow(QMainWindow):
         self._statusbar.showMessage(
             f"Annotation added on page {page_index + 1}  ({count} total)", 3000
         )
+
+    def _on_annotation_moved(self, ann: TextAnnotation) -> None:
+        """Handle annotation dragged to a new position (already mutated)."""
+        # The annotation's x_ratio/y_ratio were already updated during the drag.
+        # Just confirm in the status bar.
+        self._statusbar.showMessage(
+            f"Annotation moved on page {ann.page + 1}", 2000
+        )
+
+    def _on_annotation_edit(self, ann: TextAnnotation) -> None:
+        """Open the edit dialog for an existing annotation."""
+        dlg = AnnotationDialog(
+            ann.page, ann.x_ratio, ann.y_ratio,
+            parent=self, existing=ann,
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        updated = dlg.get_annotation(ann.page, ann.x_ratio, ann.y_ratio)
+        if not updated.text.strip():
+            return
+
+        # Mutate the existing annotation in-place so the same object
+        # reference stays valid in the page widget.
+        ann.text = updated.text
+        ann.font_size = updated.font_size
+        ann.color = updated.color
+
+        self._preview.update_page_annotations(self._output_options.annotations)
+        self._statusbar.showMessage("Annotation updated.", 3000)
+
+    def _on_annotation_delete(self, ann: TextAnnotation) -> None:
+        """Delete a single annotation."""
+        if ann in self._output_options.annotations:
+            self._output_options.annotations.remove(ann)
+            self._preview.update_page_annotations(self._output_options.annotations)
+            count = len(self._output_options.annotations)
+            self._statusbar.showMessage(
+                f"Annotation deleted  ({count} remaining)", 3000
+            )
 
     def _on_clear_annotations(self) -> None:
         """Remove all annotations."""
