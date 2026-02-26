@@ -47,17 +47,36 @@ class WatermarkOptions:
 
 
 @dataclass
+class TextAnnotation:
+    """A text annotation placed on a specific page of the merged output.
+
+    Coordinates are stored as ratios (0.0–1.0) of the page dimensions so
+    they survive resizing and are resolution-independent.
+    """
+
+    page: int                            # 0-based merged-output page index
+    x_ratio: float = 0.5                 # horizontal position (0=left, 1=right)
+    y_ratio: float = 0.5                 # vertical position (0=top, 1=bottom)
+    text: str = ""
+    font_size: float = 12.0              # reference size (scaled like page numbers)
+    color: tuple = (0.0, 0.0, 0.0)       # RGB 0–1
+
+
+@dataclass
 class OutputOptions:
     """All merge-time output options bundled together."""
 
     page_numbers: PageNumberOptions = None  # type: ignore[assignment]
     watermark: WatermarkOptions = None      # type: ignore[assignment]
+    annotations: List[TextAnnotation] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.page_numbers is None:
             self.page_numbers = PageNumberOptions()
         if self.watermark is None:
             self.watermark = WatermarkOptions()
+        if self.annotations is None:
+            self.annotations = []
 
 
 @dataclass

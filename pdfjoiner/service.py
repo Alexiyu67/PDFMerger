@@ -14,7 +14,13 @@ from typing import List, Optional, Tuple
 import fitz  # PyMuPDF
 from PySide6.QtGui import QImage, QPixmap
 
-from pdfjoiner.model import FileEntry, OutputOptions, PageNumberOptions, WatermarkOptions
+from pdfjoiner.model import (
+    FileEntry,
+    OutputOptions,
+    PageNumberOptions,
+    TextAnnotation,
+    WatermarkOptions,
+)
 
 
 def _open_document(path: Path) -> fitz.Document:
@@ -207,6 +213,48 @@ def _apply_watermark(doc: fitz.Document, opts: WatermarkOptions) -> None:
         shape.commit(overlay=True)
 
 
+def _apply_annotations(
+    doc: fitz.Document, annotations: List[TextAnnotation]
+) -> None:
+    """Stamp text annotations onto specific pages.
+
+    Each annotation carries a page index and (x_ratio, y_ratio) coordinates
+    relative to the page dimensions.  Font size is scaled to page height
+    just like page numbers.
+    """
+    if not annotations:
+        return
+
+    for ann in annotations:
+        if ann.page < 0 or ann.page >= doc.page_count:
+            continue
+        if not ann.text.strip():
+            continue
+
+        page = doc[ann.page]
+        rect = page.rect
+        scale = _scale_for_page(page)
+        font_size = ann.font_size * scale
+
+        x = ann.x_ratio * rect.width
+        y = ann.y_ratio * rect.height
+
+        # Clamp so text doesn't go off-page
+        x = max(2, min(x, rect.width - 2))
+        y = max(font_size + 2, min(y, rect.height - 2))
+
+        shape = page.new_shape()
+        shape.insert_text(
+            fitz.Point(x, y),
+            ann.text,
+            fontname="helv",
+            fontsize=font_size,
+            color=ann.color,
+        )
+        shape.finish()
+        shape.commit(overlay=True)
+
+
 def _apply_output_options(doc: fitz.Document, options: OutputOptions) -> List[str]:
     """Apply all output options to a merged document."""
     warnings: List[str] = []
@@ -215,6 +263,11 @@ def _apply_output_options(doc: fitz.Document, options: OutputOptions) -> List[st
         _apply_watermark(doc, options.watermark)
     except Exception as exc:
         warnings.append(f"Watermark: {exc}")
+
+    try:
+        _apply_annotations(doc, options.annotations)
+    except Exception as exc:
+        warnings.append(f"Annotations: {exc}")
 
     try:
         _apply_page_numbers(doc, options.page_numbers)

@@ -4,8 +4,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="fix: scale page numbers and watermark relative to each page's size&#10;&#10;- Reference height of 842pt (A4) used as baseline for user-facing values&#10;- Font size and margin multiplied by page.height/842 per page&#10;- Fixes invisible text on high-resolution images and oversized text on small pages&#10;- Coordinates clamped to page bounds to prevent off-page rendering&#10;- Font object created once outside loop for efficiency">
+    <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="fix: three bugs in page stamps — opacity, rotation, preview rendering&#10;&#10;- Watermark: use Shape.finish(fill_opacity=) instead of unsupported&#10;  insert_text(fill_opacity=) parameter (silently ignored)&#10;- Watermark: build proper rotation matrix from cos/sin instead of&#10;  fitz.Matrix(angle) which is a scaling matrix, not rotation&#10;- Preview: flush doc (tobytes + reopen) before get_pixmap so newly&#10;  inserted text overlays are visible in merged preview&#10;- Page numbers: also use Shape objects for consistency">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdfjoiner/model.py" beforeDir="false" afterPath="$PROJECT_DIR$/pdfjoiner/model.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pdfjoiner/service.py" beforeDir="false" afterPath="$PROJECT_DIR$/pdfjoiner/service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdfjoiner/view.py" beforeDir="false" afterPath="$PROJECT_DIR$/pdfjoiner/view.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -68,7 +72,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1772107516868</updated>
-      <workItem from="1772107517890" duration="2722000" />
+      <workItem from="1772107517890" duration="3984000" />
     </task>
     <task id="LOCAL-00001" summary="feat: project scaffolding and minimal window launch&#10;&#10;- Create pdfjoiner package with __init__, model, service, view stubs&#10;- Add main.py entry point with PySide6 QApplication bootstrap&#10;- Add pyproject.toml with project metadata and dependencies&#10;- Add requirements.txt (PySide6, PyMuPDF)&#10;- Add .gitignore for Python/IDE/OS artifacts&#10;- Minimal MainWindow launches at 900x600 with placeholder label">
       <option name="closed" value="true" />
@@ -150,7 +154,15 @@
       <option name="project" value="LOCAL" />
       <updated>1772110009046</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="fix: three bugs in page stamps — opacity, rotation, preview rendering&#10;&#10;- Watermark: use Shape.finish(fill_opacity=) instead of unsupported&#10;  insert_text(fill_opacity=) parameter (silently ignored)&#10;- Watermark: build proper rotation matrix from cos/sin instead of&#10;  fitz.Matrix(angle) which is a scaling matrix, not rotation&#10;- Preview: flush doc (tobytes + reopen) before get_pixmap so newly&#10;  inserted text overlays are visible in merged preview&#10;- Page numbers: also use Shape objects for consistency">
+      <option name="closed" value="true" />
+      <created>1772110813372</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1772110813372</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -166,6 +178,7 @@
     <MESSAGE value="feat: visual insertion gap during drag-and-drop reordering&#10;&#10;- Custom _DropIndicatorDelegate inflates sizeHint to open a gap&#10;- Blue-tinted insertion zone with horizontal line and dot endpoints&#10;- Gap tracks cursor position with top/bottom half hit-testing&#10;- Hides gap when hovering over dragged item's own position&#10;- Gap also shown for external OS file drops&#10;- Disables Qt's built-in drop indicator line" />
     <MESSAGE value="feat: output options dialog with page numbers and watermark&#10;&#10;- PageNumberOptions, WatermarkOptions, OutputOptions dataclasses in model&#10;- _apply_page_numbers stamps formatted numbers at 6 positions with alignment&#10;- _apply_watermark stamps rotated semi-transparent text via matrix transform&#10;- merge() accepts optional OutputOptions, applies after assembly&#10;- OutputOptionsDialog with Page Numbers and Watermark tabs&#10;- Editable format presets, opacity slider, color dropdown, position picker&#10;- Options button in bottom bar, settings persist within session&#10;- Errors in stamp application captured as warnings, not fatal" />
     <MESSAGE value="fix: scale page numbers and watermark relative to each page's size&#10;&#10;- Reference height of 842pt (A4) used as baseline for user-facing values&#10;- Font size and margin multiplied by page.height/842 per page&#10;- Fixes invisible text on high-resolution images and oversized text on small pages&#10;- Coordinates clamped to page bounds to prevent off-page rendering&#10;- Font object created once outside loop for efficiency" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix: scale page numbers and watermark relative to each page's size&#10;&#10;- Reference height of 842pt (A4) used as baseline for user-facing values&#10;- Font size and margin multiplied by page.height/842 per page&#10;- Fixes invisible text on high-resolution images and oversized text on small pages&#10;- Coordinates clamped to page bounds to prevent off-page rendering&#10;- Font object created once outside loop for efficiency" />
+    <MESSAGE value="fix: three bugs in page stamps — opacity, rotation, preview rendering&#10;&#10;- Watermark: use Shape.finish(fill_opacity=) instead of unsupported&#10;  insert_text(fill_opacity=) parameter (silently ignored)&#10;- Watermark: build proper rotation matrix from cos/sin instead of&#10;  fitz.Matrix(angle) which is a scaling matrix, not rotation&#10;- Preview: flush doc (tobytes + reopen) before get_pixmap so newly&#10;  inserted text overlays are visible in merged preview&#10;- Page numbers: also use Shape objects for consistency" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix: three bugs in page stamps — opacity, rotation, preview rendering&#10;&#10;- Watermark: use Shape.finish(fill_opacity=) instead of unsupported&#10;  insert_text(fill_opacity=) parameter (silently ignored)&#10;- Watermark: build proper rotation matrix from cos/sin instead of&#10;  fitz.Matrix(angle) which is a scaling matrix, not rotation&#10;- Preview: flush doc (tobytes + reopen) before get_pixmap so newly&#10;  inserted text overlays are visible in merged preview&#10;- Page numbers: also use Shape objects for consistency" />
   </component>
 </project>

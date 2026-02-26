@@ -15,6 +15,9 @@ A cross-platform desktop tool for merging PDFs and images into a single PDF.
 - **Reorder** — drag-and-drop or keyboard shortcuts to arrange files
 - **Include/exclude** — uncheck files to exclude them without removing from the list
 - **Drag and drop** — drop files and folders from your OS file manager
+- **Page numbers** — configurable position, format, font size, and color
+- **Watermark** — diagonal semi-transparent text with adjustable opacity and angle
+- **Text annotations** — click anywhere on the merged preview to place text labels
 - **Name the output** — choose a custom filename for the merged PDF
 - **Cross-platform** — runs on Windows, macOS, and Linux
 
@@ -70,9 +73,9 @@ The output binary will be in the `dist/` folder.
 main.py          → Entry point
 pdfjoiner/
 ├── __init__.py  → Version
-├── model.py     → Data model (FileEntry, ProjectModel)
+├── model.py     → Data model (FileEntry, ProjectModel, OutputOptions, TextAnnotation)
 ├── service.py   → PDF/image rendering and merging (PyMuPDF)
-└── view.py      → Qt UI (MainWindow, PreviewPanel, FileListWidget)
+└── view.py      → Qt UI (MainWindow, PreviewPanel, AnnotatedPageWidget, FileListWidget)
 ```
 
 **Model–View–Service** separation: the model holds state and emits signals, the view reacts and delegates to stateless service functions. No circular dependencies.

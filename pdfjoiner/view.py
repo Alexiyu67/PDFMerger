@@ -5,17 +5,23 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QModelIndex, QRect, QSize, Signal
+from PySide6.QtCore import Qt, QModelIndex, QPointF, QRect, QRectF, QSize, Signal
 from PySide6.QtGui import (
     QAction,
+    QBrush,
     QColor,
+    QCursor,
     QDragEnterEvent,
     QDragLeaveEvent,
     QDragMoveEvent,
     QDropEvent,
+    QFont,
+    QFontMetricsF,
     QKeySequence,
+    QMouseEvent,
     QPainter,
     QPen,
+    QPixmap,
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -57,6 +63,7 @@ from pdfjoiner.model import (
     OutputOptions,
     PageNumberOptions,
     ProjectModel,
+    TextAnnotation,
     WatermarkOptions,
     is_supported,
 )
@@ -309,12 +316,179 @@ class FileListWidget(QListWidget):
 
 
 # ══════════════════════════════════════════════════════════════
+# Annotation helpers
+# ══════════════════════════════════════════════════════════════
+
+
+class AnnotatedPageWidget(QWidget):
+    """Displays a single rendered page with annotation overlays.
+
+    In merged preview mode, clicking on the page emits *clicked* with
+    the page index and normalised (0–1) coordinates so an annotation
+    can be placed at that position.
+    """
+
+    # (page_index, x_ratio, y_ratio)
+    clicked = Signal(int, float, float)
+
+    def __init__(
+        self,
+        pixmap: QPixmap,
+        page_index: int,
+        annotations: List[TextAnnotation],
+        parent: Optional[QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._pixmap = pixmap
+        self._page_index = page_index
+        self._annotations = annotations
+        self.setFixedSize(pixmap.size())
+        self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+
+    def set_annotations(self, annotations: List[TextAnnotation]) -> None:
+        self._annotations = annotations
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Draw the base page image
+        painter.drawPixmap(0, 0, self._pixmap)
+
+        pw = self._pixmap.width()
+        ph = self._pixmap.height()
+
+        for ann in self._annotations:
+            if not ann.text.strip():
+                continue
+
+            # Map normalised coords → pixel coords in the widget
+            x = ann.x_ratio * pw
+            y = ann.y_ratio * ph
+
+            # Scale font size relative to widget height (same logic as service)
+            scale = ph / 842.0
+            font_size = max(8.0, ann.font_size * scale)
+
+            font = QFont("Helvetica", int(font_size))
+            painter.setFont(font)
+            fm = QFontMetricsF(font)
+
+            text_rect = fm.boundingRect(ann.text)
+            pad = 3.0
+
+            # Background pill behind text
+            bg_rect = QRectF(
+                x - pad,
+                y - text_rect.height() - pad,
+                text_rect.width() + 2 * pad,
+                text_rect.height() + 2 * pad,
+            )
+            r, g, b = ann.color
+            bg_color = QColor.fromRgbF(r, g, b, 0.12)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(bg_color))
+            painter.drawRoundedRect(bg_rect, 3, 3)
+
+            # Text
+            text_color = QColor.fromRgbF(r, g, b)
+            painter.setPen(QPen(text_color))
+            painter.drawText(QPointF(x, y), ann.text)
+
+            # Small marker dot
+            painter.setBrush(QBrush(text_color))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QPointF(x, y), 3, 3)
+
+        painter.end()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            pos = event.position()
+            pw = self._pixmap.width()
+            ph = self._pixmap.height()
+            if pw > 0 and ph > 0:
+                x_ratio = max(0.0, min(1.0, pos.x() / pw))
+                y_ratio = max(0.0, min(1.0, pos.y() / ph))
+                self.clicked.emit(self._page_index, x_ratio, y_ratio)
+        super().mousePressEvent(event)
+
+
+class AnnotationDialog(QDialog):
+    """Small dialog for entering text annotation details."""
+
+    def __init__(
+        self,
+        page_index: int,
+        x_ratio: float,
+        y_ratio: float,
+        parent: Optional[QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"Add Annotation — Page {page_index + 1}")
+        self.setMinimumWidth(340)
+
+        layout = QFormLayout(self)
+
+        self._text = QLineEdit()
+        self._text.setPlaceholderText("Enter annotation text…")
+        layout.addRow("Text:", self._text)
+
+        self._font_size = QDoubleSpinBox()
+        self._font_size.setRange(6.0, 72.0)
+        self._font_size.setValue(12.0)
+        self._font_size.setSuffix(" pt")
+        layout.addRow("Font size:", self._font_size)
+
+        self._color = QComboBox()
+        self._color_map = {
+            "Black": (0.0, 0.0, 0.0),
+            "Red": (0.8, 0.0, 0.0),
+            "Blue": (0.0, 0.0, 0.8),
+            "Green": (0.0, 0.5, 0.0),
+            "Gray": (0.5, 0.5, 0.5),
+        }
+        self._color.addItems(list(self._color_map.keys()))
+        layout.addRow("Color:", self._color)
+
+        pos_text = f"({x_ratio:.0%}, {y_ratio:.0%})"
+        pos_label = QLabel(pos_text)
+        pos_label.setStyleSheet("color: #888;")
+        layout.addRow("Position:", pos_label)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+        self._text.setFocus()
+
+    def get_annotation(self, page_index: int, x_ratio: float, y_ratio: float) -> TextAnnotation:
+        """Build a TextAnnotation from the dialog state."""
+        color_name = self._color.currentText()
+        return TextAnnotation(
+            page=page_index,
+            x_ratio=x_ratio,
+            y_ratio=y_ratio,
+            text=self._text.text().strip(),
+            font_size=self._font_size.value(),
+            color=self._color_map.get(color_name, (0.0, 0.0, 0.0)),
+        )
+
+
+# ══════════════════════════════════════════════════════════════
 # Preview panel widget
 # ══════════════════════════════════════════════════════════════
 
 
 class PreviewPanel(QFrame):
     """Right-side panel: single-file preview with page nav, or merged preview."""
+
+    # Emitted when user clicks on a page in merged preview to add annotation
+    annotation_requested = Signal(int, float, float)  # page_index, x_ratio, y_ratio
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -326,6 +500,7 @@ class PreviewPanel(QFrame):
         self._current_page: int = 0
         self._page_count: int = 0
         self._merged_mode: bool = False
+        self._page_widgets: List[AnnotatedPageWidget] = []
         self._build_ui()
         self._show_placeholder()
 
@@ -401,13 +576,17 @@ class PreviewPanel(QFrame):
             self._show_placeholder("Could not render merged preview.")
             return
 
-        for i, pix in enumerate(pixmaps):
-            img_label = QLabel()
-            img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            img_label.setPixmap(pix)
-            self._page_layout.addWidget(img_label)
+        all_annotations = options.annotations if options else []
+        self._page_widgets = []
 
-            num_label = QLabel(f"— Page {i + 1} —")
+        for i, pix in enumerate(pixmaps):
+            page_anns = [a for a in all_annotations if a.page == i]
+            page_widget = AnnotatedPageWidget(pix, i, page_anns)
+            page_widget.clicked.connect(self.annotation_requested)
+            self._page_layout.addWidget(page_widget)
+            self._page_widgets.append(page_widget)
+
+            num_label = QLabel(f"— Page {i + 1} —  (click to annotate)")
             num_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             num_label.setStyleSheet("color: #888; font-size: 11px;")
             self._page_layout.addWidget(num_label)
@@ -461,7 +640,18 @@ class PreviewPanel(QFrame):
         self._btn_next.setVisible(False)
         self._page_label.setText("")
 
+    def update_page_annotations(self, annotations: List[TextAnnotation]) -> None:
+        """Refresh annotation overlays on existing page widgets.
+
+        Called after an annotation is added/removed so we don't need to
+        re-render the entire merged preview.
+        """
+        for pw in self._page_widgets:
+            page_anns = [a for a in annotations if a.page == pw._page_index]
+            pw.set_annotations(page_anns)
+
     def _clear_pages(self) -> None:
+        self._page_widgets = []
         while self._page_layout.count():
             child = self._page_layout.takeAt(0)
             if child.widget():
@@ -820,6 +1010,7 @@ class MainWindow(QMainWindow):
 
         # Right panel — preview
         self._preview = PreviewPanel()
+        self._preview.annotation_requested.connect(self._on_annotation_requested)
         self._splitter.addWidget(self._preview)
 
         self._splitter.setSizes([400, 500])
@@ -844,6 +1035,11 @@ class MainWindow(QMainWindow):
         self._btn_options.setToolTip("Configure page numbers, watermark, and other output options")
         self._btn_options.clicked.connect(self._on_output_options)
         bottom.addWidget(self._btn_options)
+
+        self._btn_clear_annotations = QPushButton("Clear Annotations")
+        self._btn_clear_annotations.setToolTip("Remove all text annotations")
+        self._btn_clear_annotations.clicked.connect(self._on_clear_annotations)
+        bottom.addWidget(self._btn_clear_annotations)
 
         self._btn_save = QPushButton("Save Merged PDF")
         self._btn_save.setShortcut(QKeySequence("Ctrl+S"))
@@ -1039,8 +1235,48 @@ class MainWindow(QMainWindow):
         """Open the output options dialog."""
         dlg = OutputOptionsDialog(self._output_options, parent=self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
+            # Preserve annotations — the dialog only edits page numbers / watermark
+            saved_annotations = self._output_options.annotations
             self._output_options = dlg.get_options()
+            self._output_options.annotations = saved_annotations
             self._statusbar.showMessage("Output options updated.", 3000)
+
+    # ══════════════════════════════════════════════════════════
+    # Annotations
+    # ══════════════════════════════════════════════════════════
+
+    def _on_annotation_requested(self, page_index: int, x_ratio: float, y_ratio: float) -> None:
+        """Handle click on a page in merged preview — open annotation dialog."""
+        dlg = AnnotationDialog(page_index, x_ratio, y_ratio, parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        ann = dlg.get_annotation(page_index, x_ratio, y_ratio)
+        if not ann.text.strip():
+            return
+
+        self._output_options.annotations.append(ann)
+        self._preview.update_page_annotations(self._output_options.annotations)
+        count = len(self._output_options.annotations)
+        self._statusbar.showMessage(
+            f"Annotation added on page {page_index + 1}  ({count} total)", 3000
+        )
+
+    def _on_clear_annotations(self) -> None:
+        """Remove all annotations."""
+        count = len(self._output_options.annotations)
+        if count == 0:
+            self._statusbar.showMessage("No annotations to clear.", 3000)
+            return
+        reply = QMessageBox.question(
+            self, "Clear annotations",
+            f"Remove all {count} annotation(s)?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._output_options.annotations.clear()
+            self._preview.update_page_annotations([])
+            self._statusbar.showMessage("All annotations cleared.", 3000)
 
     # ══════════════════════════════════════════════════════════
     # Save / merge
