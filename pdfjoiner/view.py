@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QAction, QColor, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QStatusBar,
     QToolBar,
@@ -33,6 +35,222 @@ def _file_filter() -> str:
     """Build a file dialog filter string from supported extensions."""
     exts = " ".join(f"*{e}" for e in sorted(SUPPORTED_EXTENSIONS))
     return f"Supported files ({exts});;PDF files (*.pdf);;Images (*.jpg *.jpeg *.png *.bmp *.tiff *.tif);;All files (*)"
+
+
+# ══════════════════════════════════════════════════════════════
+# Preview panel widget
+# ══════════════════════════════════════════════════════════════
+
+
+class PreviewPanel(QFrame):
+    """Right-side panel that shows file previews and merged previews.
+
+    Supports two modes:
+    - Single file: shows one page at a time with page navigation for PDFs.
+    - Merged preview: shows all pages stacked vertically in a scrollable area.
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setMinimumWidth(300)
+        self.setStyleSheet("PreviewPanel { background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; }")
+
+        self._current_path: Optional[Path] = None
+        self._current_page: int = 0
+        self._page_count: int = 0
+        self._merged_mode: bool = False
+
+        self._build_ui()
+        self._show_placeholder()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        # ── Header: title + mode label ─────────────────────────
+        self._title = QLabel()
+        self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._title.setWordWrap(True)
+        self._title.setStyleSheet("font-weight: bold; padding: 4px;")
+        layout.addWidget(self._title)
+
+        # ── Scroll area for preview image(s) ───────────────────
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        layout.addWidget(self._scroll, stretch=1)
+
+        # Container inside scroll area (holds one or many page labels)
+        self._page_container = QWidget()
+        self._page_layout = QVBoxLayout(self._page_container)
+        self._page_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        self._page_layout.setSpacing(12)
+        self._scroll.setWidget(self._page_container)
+
+        # ── Page navigation bar ────────────────────────────────
+        nav = QHBoxLayout()
+        layout.addLayout(nav)
+
+        self._btn_prev = QPushButton("◀ Prev")
+        self._btn_prev.clicked.connect(self._go_prev)
+        nav.addWidget(self._btn_prev)
+
+        self._page_label = QLabel()
+        self._page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        nav.addWidget(self._page_label, stretch=1)
+
+        self._btn_next = QPushButton("Next ▶")
+        self._btn_next.clicked.connect(self._go_next)
+        nav.addWidget(self._btn_next)
+
+    # ── Public API ─────────────────────────────────────────────
+
+    def show_file(self, path: Path) -> None:
+        """Show a single-file preview with page navigation."""
+        self._merged_mode = False
+        self._current_path = path
+        self._current_page = 0
+        self._page_count = MergeService.get_page_count(path)
+        self._title.setText(path.name)
+        self._render_single_page()
+        self._update_nav()
+
+    def show_merged(self, entries: List[FileEntry]) -> None:
+        """Show a merged preview of all included files, all pages stacked."""
+        self._merged_mode = True
+        self._current_path = None
+
+        included = [e for e in entries if e.included]
+        if not included:
+            self._show_placeholder("No included files to preview.")
+            return
+
+        self._title.setText(f"Merged preview — {len(included)} file(s)")
+        self._clear_pages()
+
+        pixmaps = MergeService.render_merged_preview(
+            entries, max_width=self._preview_width(), max_height=800
+        )
+
+        if not pixmaps:
+            self._show_placeholder("Could not render merged preview.")
+            return
+
+        for i, pix in enumerate(pixmaps):
+            page_label = QLabel()
+            page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            page_label.setPixmap(pix)
+            self._page_layout.addWidget(page_label)
+
+            # Page number label
+            num_label = QLabel(f"— Page {i + 1} —")
+            num_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            num_label.setStyleSheet("color: #888; font-size: 11px;")
+            self._page_layout.addWidget(num_label)
+
+        self._page_count = len(pixmaps)
+        self._current_page = 0
+        self._page_label.setText(f"{self._page_count} page(s)")
+        self._btn_prev.setVisible(False)
+        self._btn_next.setVisible(False)
+
+    def show_placeholder(self, text: str = "Select a file to preview") -> None:
+        """Public wrapper for the placeholder state."""
+        self._show_placeholder(text)
+
+    # ── Internal rendering ─────────────────────────────────────
+
+    def _render_single_page(self) -> None:
+        """Render the current page of the current file."""
+        self._clear_pages()
+
+        if self._current_path is None:
+            return
+
+        pix = MergeService.render_preview(
+            self._current_path,
+            page=self._current_page,
+            max_width=self._preview_width(),
+            max_height=800,
+        )
+
+        if pix is None:
+            err = QLabel("Could not render this file.")
+            err.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._page_layout.addWidget(err)
+            return
+
+        img_label = QLabel()
+        img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        img_label.setPixmap(pix)
+        self._page_layout.addWidget(img_label)
+
+    def _show_placeholder(self, text: str = "Select a file to preview") -> None:
+        """Reset to placeholder state."""
+        self._merged_mode = False
+        self._current_path = None
+        self._current_page = 0
+        self._page_count = 0
+        self._title.setText("")
+        self._clear_pages()
+
+        placeholder = QLabel(text)
+        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        placeholder.setStyleSheet("color: #999; font-size: 14px; padding: 40px;")
+        self._page_layout.addWidget(placeholder)
+
+        self._btn_prev.setVisible(False)
+        self._btn_next.setVisible(False)
+        self._page_label.setText("")
+
+    def _clear_pages(self) -> None:
+        """Remove all widgets from the page container."""
+        while self._page_layout.count():
+            child = self._page_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+    def _preview_width(self) -> int:
+        """Available width for rendering, accounting for margins and scrollbar."""
+        return max(self._scroll.viewport().width() - 20, 200)
+
+    # ── Page navigation ────────────────────────────────────────
+
+    def _update_nav(self) -> None:
+        """Update navigation buttons and page label for single-file mode."""
+        if self._merged_mode:
+            return
+
+        has_pages = self._page_count > 1
+        self._btn_prev.setVisible(has_pages)
+        self._btn_next.setVisible(has_pages)
+        self._btn_prev.setEnabled(self._current_page > 0)
+        self._btn_next.setEnabled(self._current_page < self._page_count - 1)
+
+        if has_pages:
+            self._page_label.setText(f"Page {self._current_page + 1} of {self._page_count}")
+        elif self._page_count == 1:
+            self._page_label.setText("1 page")
+        else:
+            self._page_label.setText("")
+
+    def _go_prev(self) -> None:
+        if self._current_page > 0:
+            self._current_page -= 1
+            self._render_single_page()
+            self._update_nav()
+
+    def _go_next(self) -> None:
+        if self._current_page < self._page_count - 1:
+            self._current_page += 1
+            self._render_single_page()
+            self._update_nav()
+
+
+# ══════════════════════════════════════════════════════════════
+# Main window
+# ══════════════════════════════════════════════════════════════
 
 
 class MainWindow(QMainWindow):
@@ -105,7 +323,7 @@ class MainWindow(QMainWindow):
         root_layout = QVBoxLayout(central)
         root_layout.setContentsMargins(8, 8, 8, 8)
 
-        # ── Splitter: file list (left) | preview placeholder (right) ──
+        # ── Splitter: file list (left) | preview (right) ──
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
         root_layout.addWidget(self._splitter, stretch=1)
 
@@ -126,16 +344,13 @@ class MainWindow(QMainWindow):
 
         self._splitter.addWidget(left)
 
-        # Right panel — preview placeholder (Step 5)
-        self._preview_placeholder = QLabel("Select a file to preview")
-        self._preview_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview_placeholder.setMinimumWidth(300)
-        self._preview_placeholder.setStyleSheet("background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 4px;")
-        self._splitter.addWidget(self._preview_placeholder)
+        # Right panel — preview
+        self._preview = PreviewPanel()
+        self._splitter.addWidget(self._preview)
 
         self._splitter.setSizes([400, 500])
 
-        # ── Bottom bar: output name + save ─────────────────────
+        # ── Bottom bar: output name + preview merged + save ────
         bottom = QHBoxLayout()
         root_layout.addLayout(bottom)
 
@@ -145,6 +360,11 @@ class MainWindow(QMainWindow):
         self._output_name.setPlaceholderText("merged.pdf")
         self._output_name.setMinimumWidth(250)
         bottom.addWidget(self._output_name, stretch=1)
+
+        self._btn_preview_merged = QPushButton("Preview Merged")
+        self._btn_preview_merged.setToolTip("Preview what the merged PDF will look like")
+        self._btn_preview_merged.clicked.connect(self._on_preview_merged)
+        bottom.addWidget(self._btn_preview_merged)
 
         self._btn_save = QPushButton("Save Merged PDF")
         self._btn_save.setShortcut(QKeySequence("Ctrl+S"))
@@ -162,10 +382,8 @@ class MainWindow(QMainWindow):
 
     def _on_list_changed(self) -> None:
         """Rebuild the QListWidget from the model."""
-        # Remember current selection
         current_row = self._file_list.currentRow()
 
-        # Block signals while rebuilding to avoid triggering itemChanged
         self._file_list.blockSignals(True)
         self._file_list.clear()
 
@@ -176,7 +394,6 @@ class MainWindow(QMainWindow):
             item.setCheckState(
                 Qt.CheckState.Checked if entry.included else Qt.CheckState.Unchecked
             )
-            # Gray out excluded files
             if not entry.included:
                 item.setForeground(QColor(160, 160, 160))
             self._file_list.addItem(item)
@@ -231,6 +448,9 @@ class MainWindow(QMainWindow):
         indices = sorted(set(idx.row() for idx in self._file_list.selectedIndexes()), reverse=True)
         if indices:
             self._model.remove(indices)
+            # Reset preview if we removed the previewed file
+            if self._file_list.currentRow() < 0:
+                self._preview.show_placeholder()
 
     def _on_move_up(self) -> None:
         row = self._file_list.currentRow()
@@ -257,16 +477,26 @@ class MainWindow(QMainWindow):
         self._model.set_included(row, is_checked)
 
     # ══════════════════════════════════════════════════════════
-    # Selection (preview hook for Step 5)
+    # Preview
     # ══════════════════════════════════════════════════════════
 
     def _on_selection_changed(self, row: int) -> None:
-        """Called when the user clicks a different row. Preview hook for Step 5."""
+        """Show preview of the selected file."""
         if 0 <= row < len(self._model):
             entry = self._model[row]
-            self._preview_placeholder.setText(f"Preview: {entry.filename}\n(coming in Step 5)")
+            self._preview.show_file(entry.path)
         else:
-            self._preview_placeholder.setText("Select a file to preview")
+            self._preview.show_placeholder()
+
+    def _on_preview_merged(self) -> None:
+        """Show a preview of the merged output."""
+        included = self._model.included_entries()
+        if not included:
+            QMessageBox.information(self, "Nothing to preview", "No files are included for merging.")
+            return
+        self._statusbar.showMessage("Rendering merged preview…")
+        self._preview.show_merged(self._model.entries)
+        self._statusbar.showMessage(f"Merged preview: {len(included)} file(s)", 3000)
 
     # ══════════════════════════════════════════════════════════
     # Save / merge
@@ -278,14 +508,12 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Nothing to merge", "No files are included for merging.")
             return
 
-        # Determine output filename
         name = self._output_name.text().strip()
         if not name:
             name = "merged.pdf"
         if not name.lower().endswith(".pdf"):
             name += ".pdf"
 
-        # Ask where to save
         path, _ = QFileDialog.getSaveFileName(
             self, "Save Merged PDF", name, "PDF files (*.pdf)"
         )
