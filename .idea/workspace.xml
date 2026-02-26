@@ -4,12 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/PDFJoiner.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="feat: add MergeService for preview rendering and PDF merging&#10;&#10;- render_preview / render_thumbnail via PyMuPDF → QPixmap&#10;- render_merged_preview for full merged document preview&#10;- merge() combines included PDFs and images into single output PDF&#10;- Images inserted at native resolution, corrupt files skipped gracefully&#10;- Smoke test in main.py exercises page count, thumbnails, and merge">
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdfjoiner/view.py" beforeDir="false" afterPath="$PROJECT_DIR$/pdfjoiner/view.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -19,6 +16,18 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "Alexiyu67"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/Alexiyu67/PDFMerger.git",
+    "accountId": "a04dc589-2245-4ed2-8ed8-32a06f824da6"
+  }
+}]]></component>
   <component name="ProjectColorInfo"><![CDATA[{
   "associatedIndex": 0
 }]]></component>
@@ -60,11 +69,42 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1772107516868</updated>
-      <workItem from="1772107517890" duration="496000" />
+      <workItem from="1772107517890" duration="934000" />
     </task>
+    <task id="LOCAL-00001" summary="feat: project scaffolding and minimal window launch&#10;&#10;- Create pdfjoiner package with __init__, model, service, view stubs&#10;- Add main.py entry point with PySide6 QApplication bootstrap&#10;- Add pyproject.toml with project metadata and dependencies&#10;- Add requirements.txt (PySide6, PyMuPDF)&#10;- Add .gitignore for Python/IDE/OS artifacts&#10;- Minimal MainWindow launches at 900x600 with placeholder label">
+      <option name="closed" value="true" />
+      <created>1772108090168</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1772108090168</updated>
+    </task>
+    <task id="LOCAL-00002" summary="feat: add data model with FileEntry and ProjectModel&#10;&#10;- FileEntry dataclass with path, included flag, page_count, thumbnail&#10;- ProjectModel with add_files, add_folder, remove, clear, move, toggle&#10;- Skips unsupported extensions and duplicate paths on add&#10;- Single list_changed signal emitted on every mutation&#10;- Smoke test in main.py to verify model operations via console">
+      <option name="closed" value="true" />
+      <created>1772108216478</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1772108216478</updated>
+    </task>
+    <task id="LOCAL-00003" summary="feat: add MergeService for preview rendering and PDF merging&#10;&#10;- render_preview / render_thumbnail via PyMuPDF → QPixmap&#10;- render_merged_preview for full merged document preview&#10;- merge() combines included PDFs and images into single output PDF&#10;- Images inserted at native resolution, corrupt files skipped gracefully&#10;- Smoke test in main.py exercises page count, thumbnails, and merge">
+      <option name="closed" value="true" />
+      <created>1772108312443</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1772108312443</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="feat: project scaffolding and minimal window launch&#10;&#10;- Create pdfjoiner package with __init__, model, service, view stubs&#10;- Add main.py entry point with PySide6 QApplication bootstrap&#10;- Add pyproject.toml with project metadata and dependencies&#10;- Add requirements.txt (PySide6, PyMuPDF)&#10;- Add .gitignore for Python/IDE/OS artifacts&#10;- Minimal MainWindow launches at 900x600 with placeholder label" />
+    <MESSAGE value="feat: add data model with FileEntry and ProjectModel&#10;&#10;- FileEntry dataclass with path, included flag, page_count, thumbnail&#10;- ProjectModel with add_files, add_folder, remove, clear, move, toggle&#10;- Skips unsupported extensions and duplicate paths on add&#10;- Single list_changed signal emitted on every mutation&#10;- Smoke test in main.py to verify model operations via console" />
+    <MESSAGE value="feat: add MergeService for preview rendering and PDF merging&#10;&#10;- render_preview / render_thumbnail via PyMuPDF → QPixmap&#10;- render_merged_preview for full merged document preview&#10;- merge() combines included PDFs and images into single output PDF&#10;- Images inserted at native resolution, corrupt files skipped gracefully&#10;- Smoke test in main.py exercises page count, thumbnails, and merge" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: add MergeService for preview rendering and PDF merging&#10;&#10;- render_preview / render_thumbnail via PyMuPDF → QPixmap&#10;- render_merged_preview for full merged document preview&#10;- merge() combines included PDFs and images into single output PDF&#10;- Images inserted at native resolution, corrupt files skipped gracefully&#10;- Smoke test in main.py exercises page count, thumbnails, and merge" />
   </component>
 </project>
