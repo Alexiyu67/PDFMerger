@@ -5,14 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QModelIndex, QRect, QSize, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
     QDragEnterEvent,
+    QDragLeaveEvent,
     QDragMoveEvent,
     QDropEvent,
     QKeySequence,
+    QPainter,
+    QPen,
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -30,6 +33,8 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSplitter,
     QStatusBar,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -74,6 +79,71 @@ def _has_acceptable_files(event) -> bool:
 
 
 # ══════════════════════════════════════════════════════════════
+# Drop indicator delegate — paints a visual gap between items
+# ══════════════════════════════════════════════════════════════
+
+_GAP_HEIGHT = 36  # pixel height of the insertion gap
+_GAP_COLOR = QColor(80, 130, 220, 45)    # subtle blue fill
+_GAP_LINE_COLOR = QColor(80, 130, 220)   # blue insertion line
+_GAP_LINE_WIDTH = 2
+
+
+class _DropIndicatorDelegate(QStyledItemDelegate):
+    """Custom delegate that inflates one row to create a visual drop gap.
+
+    The owning FileListWidget sets ``gap_index`` to the row *before which*
+    the gap should appear.  A value of -1 means no gap.
+    """
+
+    def __init__(self, list_widget: "FileListWidget") -> None:
+        super().__init__(list_widget)
+        self._list = list_widget
+
+    # ── Size ───────────────────────────────────────────────────
+
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
+        size = super().sizeHint(option, index)
+        if self._list.gap_index >= 0 and index.row() == self._list.gap_index:
+            size.setHeight(size.height() + _GAP_HEIGHT)
+        return size
+
+    # ── Paint ──────────────────────────────────────────────────
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
+        gap = self._list.gap_index
+
+        if gap >= 0 and index.row() == gap:
+            # Draw the gap zone at the top of this item's rect
+            gap_rect = QRect(option.rect)
+            gap_rect.setHeight(_GAP_HEIGHT)
+
+            painter.fillRect(gap_rect, _GAP_COLOR)
+
+            # Horizontal insertion line centred in the gap
+            painter.save()
+            pen = QPen(_GAP_LINE_COLOR, _GAP_LINE_WIDTH)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            y = gap_rect.center().y()
+            painter.drawLine(gap_rect.left() + 6, y, gap_rect.right() - 6, y)
+
+            # Small circles at each end of the line
+            painter.setBrush(_GAP_LINE_COLOR)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(gap_rect.left() + 3, y - 3, 6, 6)
+            painter.drawEllipse(gap_rect.right() - 9, y - 3, 6, 6)
+            painter.restore()
+
+            # Shift the actual item content below the gap
+            shifted = QStyleOptionViewItem(option)
+            shifted.rect = QRect(option.rect)
+            shifted.rect.setTop(option.rect.top() + _GAP_HEIGHT)
+            super().paint(painter, shifted, index)
+        else:
+            super().paint(painter, option, index)
+
+
+# ══════════════════════════════════════════════════════════════
 # File list with drag-and-drop support
 # ══════════════════════════════════════════════════════════════
 
@@ -81,8 +151,8 @@ def _has_acceptable_files(event) -> bool:
 class FileListWidget(QListWidget):
     """QListWidget subclass that supports:
 
-    - Internal drag-and-drop reordering (emits ``row_moved``)
-    - External OS file/folder drops (emits ``files_dropped``)
+    - Internal drag-and-drop reordering with a visual insertion gap
+    - External OS file/folder drops
     """
 
     row_moved = Signal(int, int)
@@ -93,34 +163,65 @@ class FileListWidget(QListWidget):
         self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setAcceptDrops(True)
+
+        # Disable Qt's built-in drop indicator line — we draw our own
+        self.setDropIndicatorShown(False)
+
         self._drag_start_row: int = -1
+        self._gap_index: int = -1  # row before which the gap is shown
+
+        self.setItemDelegate(_DropIndicatorDelegate(self))
+
+    @property
+    def gap_index(self) -> int:
+        return self._gap_index
+
+    # ── Gap management ─────────────────────────────────────────
+
+    def _set_gap(self, index: int) -> None:
+        """Set the visual gap position. -1 to hide."""
+        if index == self._gap_index:
+            return
+        self._gap_index = index
+        # Force the list to re-query sizeHint and repaint
+        self.scheduleDelayedItemsLayout()
+
+    def _clear_gap(self) -> None:
+        self._set_gap(-1)
+
+    def _gap_index_for_pos(self, pos) -> int:
+        """Determine which gap index a drag position maps to.
+
+        If the cursor is in the top half of an item → gap before that item.
+        If in the bottom half → gap before the next item.
+        Past the last item → gap at count() (append).
+        """
+        item = self.itemAt(pos.toPoint() if hasattr(pos, 'toPoint') else pos)
+        if item is None:
+            return self.count()
+
+        row = self.row(item)
+        rect = self.visualItemRect(item)
+
+        # Account for existing gap height in the hit-test
+        if row == self._gap_index:
+            item_top = rect.top() + _GAP_HEIGHT
+        else:
+            item_top = rect.top()
+
+        item_mid = item_top + (rect.height() - (_GAP_HEIGHT if row == self._gap_index else 0)) / 2
+        cursor_y = pos.toPoint().y() if hasattr(pos, 'toPoint') else pos.y()
+
+        if cursor_y < item_mid:
+            return row
+        else:
+            return row + 1
+
+    # ── Drag events ────────────────────────────────────────────
 
     def startDrag(self, supportedActions) -> None:
         self._drag_start_row = self.currentRow()
         super().startDrag(supportedActions)
-
-    def dropEvent(self, event: QDropEvent) -> None:
-        # External drop
-        if event.source() is not self and event.mimeData().hasUrls():
-            event.setDropAction(Qt.DropAction.CopyAction)
-            event.accept()
-            paths = _paths_from_mime(event)
-            if paths:
-                self.files_dropped.emit(paths)
-            return
-
-        # Internal reorder
-        if event.source() is self and self._drag_start_row >= 0:
-            target_item = self.itemAt(event.position().toPoint())
-            target_row = self.row(target_item) if target_item else self.count() - 1
-            old_row = self._drag_start_row
-            self._drag_start_row = -1
-            if old_row != target_row:
-                event.ignore()
-                self.row_moved.emit(old_row, target_row)
-                return
-
-        super().dropEvent(event)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if event.source() is self:
@@ -132,11 +233,61 @@ class FileListWidget(QListWidget):
 
     def dragMoveEvent(self, event: QDragMoveEvent) -> None:
         if event.source() is self:
+            # Internal reorder — show gap
             event.accept()
+            target = self._gap_index_for_pos(event.position())
+
+            # Don't show gap at the dragged item's own position
+            # (placing it right before or right after itself is a no-op)
+            if self._drag_start_row >= 0:
+                if target == self._drag_start_row or target == self._drag_start_row + 1:
+                    self._clear_gap()
+                    return
+
+            self._set_gap(target)
+
         elif event.mimeData().hasUrls():
+            # External file drop — show gap for insertion position
             event.acceptProposedAction()
+            target = self._gap_index_for_pos(event.position())
+            self._set_gap(target)
         else:
             event.ignore()
+
+    def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:
+        self._clear_gap()
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        target = self._gap_index if self._gap_index >= 0 else self._gap_index_for_pos(event.position())
+        self._clear_gap()
+
+        # External drop
+        if event.source() is not self and event.mimeData().hasUrls():
+            event.setDropAction(Qt.DropAction.CopyAction)
+            event.accept()
+            paths = _paths_from_mime(event)
+            if paths:
+                self.files_dropped.emit(paths)
+            return
+
+        # Internal reorder
+        if event.source() is self and self._drag_start_row >= 0:
+            old_row = self._drag_start_row
+            self._drag_start_row = -1
+
+            # Convert "insert before target" to a move-to index
+            # If dragging down, the removal of the source shifts indices
+            new_row = target if target < old_row else target - 1
+            new_row = max(0, min(new_row, self.count() - 1))
+
+            if old_row != new_row:
+                event.ignore()
+                self.row_moved.emit(old_row, new_row)
+                return
+
+        self._drag_start_row = -1
+        super().dropEvent(event)
 
 
 # ══════════════════════════════════════════════════════════════
