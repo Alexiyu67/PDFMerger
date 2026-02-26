@@ -791,6 +791,7 @@ class PreviewPanel(QFrame):
         self._merged_mode: bool = False
         self._annotate_mode: bool = False
         self._page_widgets: List[AnnotatedPageWidget] = []
+        self._single_page_widgets: List[QLabel] = []
         self._build_ui()
         self._show_placeholder()
 
@@ -874,7 +875,7 @@ class PreviewPanel(QFrame):
         self._current_page = 0
         self._page_count = MergeService.get_page_count(path)
         self._title.setText(path.name)
-        self._render_single_page()
+        self._render_all_pages()
         self._update_nav()
 
     def show_merged(
@@ -945,26 +946,38 @@ class PreviewPanel(QFrame):
 
     # ── Internal ───────────────────────────────────────────────
 
-    def _render_single_page(self) -> None:
+    def _render_all_pages(self) -> None:
+        """Render every page of the current single file into the scroll area."""
         self._clear_pages()
         if self._current_path is None:
             return
 
-        pix = MergeService.render_preview(
-            self._current_path, page=self._current_page,
-            max_width=self._preview_width(), max_height=1200,
-        )
-        if pix is None:
+        pw = self._preview_width()
+        for i in range(self._page_count):
+            pix = MergeService.render_preview(
+                self._current_path, page=i,
+                max_width=pw, max_height=1200,
+            )
+            if pix is None:
+                continue
+
+            img_label = QLabel()
+            img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            img_label.setPixmap(pix)
+            self._page_layout.addWidget(img_label)
+            self._single_page_widgets.append(img_label)
+
+            if self._page_count > 1:
+                num_label = QLabel(f"— Page {i + 1} of {self._page_count} —")
+                num_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                num_label.setStyleSheet("color: palette(dark); font-size: 11px;")
+                self._page_layout.addWidget(num_label)
+
+        if not self._single_page_widgets:
             err = QLabel("Could not render this file.")
             err.setAlignment(Qt.AlignmentFlag.AlignCenter)
             err.setStyleSheet("color: #c00; padding: 20px;")
             self._page_layout.addWidget(err)
-            return
-
-        img_label = QLabel()
-        img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        img_label.setPixmap(pix)
-        self._page_layout.addWidget(img_label)
 
     def _show_placeholder(self, text: str = "Select a file to preview") -> None:
         self._merged_mode = False
@@ -995,6 +1008,7 @@ class PreviewPanel(QFrame):
 
     def _clear_pages(self) -> None:
         self._page_widgets = []
+        self._single_page_widgets = []
         while self._page_layout.count():
             child = self._page_layout.takeAt(0)
             if child.widget():
@@ -1010,6 +1024,9 @@ class PreviewPanel(QFrame):
 
     def _update_nav(self) -> None:
         if self._merged_mode:
+            self._btn_prev.setVisible(False)
+            self._btn_next.setVisible(False)
+            self._page_label.setText(f"{self._page_count} page(s)")
             return
         has_pages = self._page_count > 1
         self._btn_prev.setVisible(has_pages)
@@ -1023,16 +1040,21 @@ class PreviewPanel(QFrame):
         else:
             self._page_label.setText("")
 
+    def _scroll_to_page(self, page: int) -> None:
+        """Scroll the viewport so that the given page widget is visible."""
+        if 0 <= page < len(self._single_page_widgets):
+            self._scroll.ensureWidgetVisible(self._single_page_widgets[page], 0, 20)
+
     def _go_prev(self) -> None:
         if self._current_page > 0:
             self._current_page -= 1
-            self._render_single_page()
+            self._scroll_to_page(self._current_page)
             self._update_nav()
 
     def _go_next(self) -> None:
         if self._current_page < self._page_count - 1:
             self._current_page += 1
-            self._render_single_page()
+            self._scroll_to_page(self._current_page)
             self._update_nav()
 
 
