@@ -59,8 +59,6 @@ The output binary will be in the `dist/` folder.
 |----------------------|------------------|
 | Add files/folders    | `Ctrl+O`         |
 | Delete (file or ann.)| `Delete`         |
-| Move up              | `Ctrl+Up`        |
-| Move down            | `Ctrl+Down`      |
 | Save merged          | `Ctrl+S`         |
 | Clear list           | `Ctrl+L`         |
 | About                | `F1`             |

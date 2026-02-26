@@ -4,8 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="feat: annotation management — select, drag-move, edit, delete&#10;&#10;- AnnotatedPageWidget: hit-testing, selection highlight, drag-to-move,&#10;  double-click edit, Delete key, right-click context menu&#10;- AnnotationDialog: edit mode with pre-filled values&#10;- PreviewPanel: forward move/edit/delete signals&#10;- MainWindow: handlers for move (in-place), edit (dialog), delete&#10;- Cursor feedback: crosshair, open hand on hover, closed hand on drag&#10;- Page hint text updated with interaction instructions">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="feat: UX improvements — unified add, annotate toggle, delete key, options bar&#10;&#10;- Replace Add Files + Add Folder with single &quot;Add…&quot; button using&#10;  non-native QFileDialog that accepts both files and directories&#10;- Add checkable &quot;✏ Annotate&quot; toolbar toggle — clicks only create&#10;  annotations when mode is on; select/move/edit/delete always work&#10;- Fix Delete key: route to annotation delete when one is selected,&#10;  otherwise remove files from list (was intercepted by toolbar action)&#10;- Add options bar with Page Numbers / Watermark quick-toggle checkboxes&#10;  and Settings button; bottom bar simplified to output + save only&#10;- Cursor feedback: arrow by default, crosshair only in annotate mode&#10;- README shortcuts table updated">
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pdfjoiner/view.py" beforeDir="false" afterPath="$PROJECT_DIR$/pdfjoiner/view.py" afterDir="false" />
     </list>
@@ -70,7 +69,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1772107516868</updated>
-      <workItem from="1772107517890" duration="5005000" />
+      <workItem from="1772107517890" duration="5808000" />
     </task>
     <task id="LOCAL-00001" summary="feat: project scaffolding and minimal window launch&#10;&#10;- Create pdfjoiner package with __init__, model, service, view stubs&#10;- Add main.py entry point with PySide6 QApplication bootstrap&#10;- Add pyproject.toml with project metadata and dependencies&#10;- Add requirements.txt (PySide6, PyMuPDF)&#10;- Add .gitignore for Python/IDE/OS artifacts&#10;- Minimal MainWindow launches at 900x600 with placeholder label">
       <option name="closed" value="true" />
@@ -176,7 +175,15 @@
       <option name="project" value="LOCAL" />
       <updated>1772111897006</updated>
     </task>
-    <option name="localTasksCounter" value="14" />
+    <task id="LOCAL-00014" summary="feat: UX improvements — unified add, annotate toggle, delete key, options bar&#10;&#10;- Replace Add Files + Add Folder with single &quot;Add…&quot; button using&#10;  non-native QFileDialog that accepts both files and directories&#10;- Add checkable &quot;✏ Annotate&quot; toolbar toggle — clicks only create&#10;  annotations when mode is on; select/move/edit/delete always work&#10;- Fix Delete key: route to annotation delete when one is selected,&#10;  otherwise remove files from list (was intercepted by toolbar action)&#10;- Add options bar with Page Numbers / Watermark quick-toggle checkboxes&#10;  and Settings button; bottom bar simplified to output + save only&#10;- Cursor feedback: arrow by default, crosshair only in annotate mode&#10;- README shortcuts table updated">
+      <option name="closed" value="true" />
+      <created>1772113052309</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1772113052309</updated>
+    </task>
+    <option name="localTasksCounter" value="15" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -195,6 +202,7 @@
     <MESSAGE value="fix: three bugs in page stamps — opacity, rotation, preview rendering&#10;&#10;- Watermark: use Shape.finish(fill_opacity=) instead of unsupported&#10;  insert_text(fill_opacity=) parameter (silently ignored)&#10;- Watermark: build proper rotation matrix from cos/sin instead of&#10;  fitz.Matrix(angle) which is a scaling matrix, not rotation&#10;- Preview: flush doc (tobytes + reopen) before get_pixmap so newly&#10;  inserted text overlays are visible in merged preview&#10;- Page numbers: also use Shape objects for consistency" />
     <MESSAGE value="feat: click-to-place text annotations on merged preview pages&#10;&#10;- TextAnnotation dataclass with normalised coordinates (model.py)&#10;- _apply_annotations stamps text during merge (service.py)&#10;- AnnotatedPageWidget with click handler and overlay painting (view.py)&#10;- AnnotationDialog for text, font size, color entry (view.py)&#10;- Clear Annotations button in bottom bar&#10;- Annotations survive output options dialog changes&#10;- README updated with annotation feature" />
     <MESSAGE value="feat: annotation management — select, drag-move, edit, delete&#10;&#10;- AnnotatedPageWidget: hit-testing, selection highlight, drag-to-move,&#10;  double-click edit, Delete key, right-click context menu&#10;- AnnotationDialog: edit mode with pre-filled values&#10;- PreviewPanel: forward move/edit/delete signals&#10;- MainWindow: handlers for move (in-place), edit (dialog), delete&#10;- Cursor feedback: crosshair, open hand on hover, closed hand on drag&#10;- Page hint text updated with interaction instructions" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: annotation management — select, drag-move, edit, delete&#10;&#10;- AnnotatedPageWidget: hit-testing, selection highlight, drag-to-move,&#10;  double-click edit, Delete key, right-click context menu&#10;- AnnotationDialog: edit mode with pre-filled values&#10;- PreviewPanel: forward move/edit/delete signals&#10;- MainWindow: handlers for move (in-place), edit (dialog), delete&#10;- Cursor feedback: crosshair, open hand on hover, closed hand on drag&#10;- Page hint text updated with interaction instructions" />
+    <MESSAGE value="feat: UX improvements — unified add, annotate toggle, delete key, options bar&#10;&#10;- Replace Add Files + Add Folder with single &quot;Add…&quot; button using&#10;  non-native QFileDialog that accepts both files and directories&#10;- Add checkable &quot;✏ Annotate&quot; toolbar toggle — clicks only create&#10;  annotations when mode is on; select/move/edit/delete always work&#10;- Fix Delete key: route to annotation delete when one is selected,&#10;  otherwise remove files from list (was intercepted by toolbar action)&#10;- Add options bar with Page Numbers / Watermark quick-toggle checkboxes&#10;  and Settings button; bottom bar simplified to output + save only&#10;- Cursor feedback: arrow by default, crosshair only in annotate mode&#10;- README shortcuts table updated" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: UX improvements — unified add, annotate toggle, delete key, options bar&#10;&#10;- Replace Add Files + Add Folder with single &quot;Add…&quot; button using&#10;  non-native QFileDialog that accepts both files and directories&#10;- Add checkable &quot;✏ Annotate&quot; toolbar toggle — clicks only create&#10;  annotations when mode is on; select/move/edit/delete always work&#10;- Fix Delete key: route to annotation delete when one is selected,&#10;  otherwise remove files from list (was intercepted by toolbar action)&#10;- Add options bar with Page Numbers / Watermark quick-toggle checkboxes&#10;  and Settings button; bottom bar simplified to output + save only&#10;- Cursor feedback: arrow by default, crosshair only in annotate mode&#10;- README shortcuts table updated" />
   </component>
 </project>

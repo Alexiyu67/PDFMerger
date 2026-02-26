@@ -316,6 +316,78 @@ class FileListWidget(QListWidget):
 
 
 # ══════════════════════════════════════════════════════════════
+# Inline row widget for the file list
+# ══════════════════════════════════════════════════════════════
+
+_BTN_STYLE = """
+    QPushButton {
+        border: none; background: transparent; padding: 2px 5px;
+        font-size: 13px;
+    }
+    QPushButton:hover { background: palette(midlight); border-radius: 3px; }
+"""
+_BTN_DEL_STYLE = """
+    QPushButton {
+        border: none; background: transparent; padding: 2px 5px;
+        font-size: 13px;
+    }
+    QPushButton:hover { color: #c00; background: rgba(255,0,0,0.08); border-radius: 3px; }
+"""
+
+
+class FileRowWidget(QWidget):
+    """Inline widget for a single row in the file list.
+
+    Layout: [checkbox] [filename + info label ...stretch...] [▲] [▼] [✕]
+    """
+
+    include_toggled = Signal(int, bool)
+    move_up_clicked = Signal(int)
+    move_down_clicked = Signal(int)
+    remove_clicked = Signal(int)
+
+    def __init__(self, row: int, entry: "FileEntry", label_text: str,
+                 parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._row = row
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 1, 4, 1)
+        layout.setSpacing(2)
+
+        self._check = QCheckBox()
+        self._check.setChecked(entry.included)
+        self._check.toggled.connect(lambda checked: self.include_toggled.emit(self._row, checked))
+        layout.addWidget(self._check)
+
+        self._label = QLabel(label_text)
+        if not entry.included:
+            self._label.setEnabled(False)  # uses palette's disabled text color
+        layout.addWidget(self._label, stretch=1)
+
+        btn_up = QPushButton("▲")
+        btn_up.setFixedSize(24, 22)
+        btn_up.setStyleSheet(_BTN_STYLE)
+        btn_up.setToolTip("Move up")
+        btn_up.clicked.connect(lambda: self.move_up_clicked.emit(self._row))
+        layout.addWidget(btn_up)
+
+        btn_down = QPushButton("▼")
+        btn_down.setFixedSize(24, 22)
+        btn_down.setStyleSheet(_BTN_STYLE)
+        btn_down.setToolTip("Move down")
+        btn_down.clicked.connect(lambda: self.move_down_clicked.emit(self._row))
+        layout.addWidget(btn_down)
+
+        btn_del = QPushButton("✕")
+        btn_del.setFixedSize(24, 22)
+        btn_del.setStyleSheet(_BTN_DEL_STYLE)
+        btn_del.setToolTip("Remove")
+        btn_del.clicked.connect(lambda: self.remove_clicked.emit(self._row))
+        layout.addWidget(btn_del)
+
+
+# ══════════════════════════════════════════════════════════════
 # Annotation helpers
 # ══════════════════════════════════════════════════════════════
 
@@ -664,7 +736,7 @@ class AnnotationDialog(QDialog):
 
         pos_text = f"({x_ratio:.0%}, {y_ratio:.0%})"
         pos_label = QLabel(pos_text)
-        pos_label.setStyleSheet("color: #888;")
+        pos_label.setEnabled(False)
         layout.addRow("Position:", pos_label)
 
         buttons = QDialogButtonBox(
@@ -704,12 +776,14 @@ class PreviewPanel(QFrame):
     annotation_moved = Signal(object)
     annotation_edit_requested = Signal(object)
     annotation_delete_requested = Signal(object)
+    # Emitted when user switches between single/merged via the toggle
+    mode_changed = Signal(str)  # "single" or "merged"
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setMinimumWidth(300)
         self.setStyleSheet(
-            "PreviewPanel { background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; }"
+            "PreviewPanel { background: palette(base); border: 1px solid palette(mid); border-radius: 4px; }"
         )
         self._current_path: Optional[Path] = None
         self._current_page: int = 0
@@ -723,6 +797,39 @@ class PreviewPanel(QFrame):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
+
+        # Toggle bar: Single / Merged
+        toggle_row = QHBoxLayout()
+        toggle_row.setSpacing(0)
+        layout.addLayout(toggle_row)
+
+        _SEG_LEFT = (
+            "QPushButton { border: 1px solid palette(mid); border-right: none;"
+            " border-radius: 0; border-top-left-radius: 4px; border-bottom-left-radius: 4px;"
+            " padding: 4px 14px; background: palette(button); color: palette(button-text); }"
+            "QPushButton:checked { background: palette(highlight); color: palette(highlighted-text); }"
+        )
+        _SEG_RIGHT = (
+            "QPushButton { border: 1px solid palette(mid);"
+            " border-radius: 0; border-top-right-radius: 4px; border-bottom-right-radius: 4px;"
+            " padding: 4px 14px; background: palette(button); color: palette(button-text); }"
+            "QPushButton:checked { background: palette(highlight); color: palette(highlighted-text); }"
+        )
+
+        self._btn_single = QPushButton("Single")
+        self._btn_single.setCheckable(True)
+        self._btn_single.setChecked(True)
+        self._btn_single.setStyleSheet(_SEG_LEFT)
+        self._btn_single.clicked.connect(lambda: self._set_preview_mode("single"))
+        toggle_row.addWidget(self._btn_single)
+
+        self._btn_merged = QPushButton("Merged")
+        self._btn_merged.setCheckable(True)
+        self._btn_merged.setStyleSheet(_SEG_RIGHT)
+        self._btn_merged.clicked.connect(lambda: self._set_preview_mode("merged"))
+        toggle_row.addWidget(self._btn_merged)
+
+        toggle_row.addStretch()
 
         self._title = QLabel()
         self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -761,6 +868,8 @@ class PreviewPanel(QFrame):
 
     def show_file(self, path: Path) -> None:
         self._merged_mode = False
+        self._btn_single.setChecked(True)
+        self._btn_merged.setChecked(False)
         self._current_path = path
         self._current_page = 0
         self._page_count = MergeService.get_page_count(path)
@@ -774,6 +883,8 @@ class PreviewPanel(QFrame):
         options: Optional["OutputOptions"] = None,
     ) -> None:
         self._merged_mode = True
+        self._btn_single.setChecked(False)
+        self._btn_merged.setChecked(True)
         self._current_path = None
 
         included = [e for e in entries if e.included]
@@ -785,7 +896,7 @@ class PreviewPanel(QFrame):
         self._clear_pages()
 
         pixmaps = MergeService.render_merged_preview(
-            entries, max_width=self._preview_width(), max_height=800,
+            entries, max_width=self._preview_width(), max_height=1200,
             options=options,
         )
         if not pixmaps:
@@ -808,7 +919,7 @@ class PreviewPanel(QFrame):
 
             num_label = QLabel(f"— Page {i + 1} —  (double-click annotation to edit, right-click for menu)")
             num_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            num_label.setStyleSheet("color: #888; font-size: 11px;")
+            num_label.setStyleSheet("color: palette(dark); font-size: 11px;")
             self._page_layout.addWidget(num_label)
 
         self._page_count = len(pixmaps)
@@ -823,6 +934,12 @@ class PreviewPanel(QFrame):
         for pw in self._page_widgets:
             pw.annotate_mode = on
 
+    def _set_preview_mode(self, mode: str) -> None:
+        """Switch the toggle buttons and emit mode_changed."""
+        self._btn_single.setChecked(mode == "single")
+        self._btn_merged.setChecked(mode == "merged")
+        self.mode_changed.emit(mode)
+
     def show_placeholder(self, text: str = "Select a file to preview") -> None:
         self._show_placeholder(text)
 
@@ -835,7 +952,7 @@ class PreviewPanel(QFrame):
 
         pix = MergeService.render_preview(
             self._current_path, page=self._current_page,
-            max_width=self._preview_width(), max_height=800,
+            max_width=self._preview_width(), max_height=1200,
         )
         if pix is None:
             err = QLabel("Could not render this file.")
@@ -859,7 +976,7 @@ class PreviewPanel(QFrame):
 
         placeholder = QLabel(text)
         placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        placeholder.setStyleSheet("color: #999; font-size: 14px; padding: 40px;")
+        placeholder.setStyleSheet("color: palette(dark); font-size: 14px; padding: 40px;")
         self._page_layout.addWidget(placeholder)
 
         self._btn_prev.setVisible(False)
@@ -884,7 +1001,12 @@ class PreviewPanel(QFrame):
                 child.widget().deleteLater()
 
     def _preview_width(self) -> int:
-        return max(self._scroll.viewport().width() - 20, 200)
+        """Target width for rendering pages.
+
+        Use at least 800px for sharp text, but allow viewport to be
+        wider if the panel is stretched.
+        """
+        return max(self._scroll.viewport().width() - 20, 800)
 
     def _update_nav(self) -> None:
         if self._merged_mode:
@@ -1152,40 +1274,35 @@ class MainWindow(QMainWindow):
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.addToolBar(tb)
 
+        from PySide6.QtWidgets import QMenu, QToolButton
+
+        add_menu = QMenu(self)
+        self._act_add_files = add_menu.addAction("Files…")
+        self._act_add_files.setToolTip("Add PDF or image files")
+        self._act_add_files.triggered.connect(self._on_add_files)
+        self._act_add_folder = add_menu.addAction("Folder…")
+        self._act_add_folder.setToolTip("Add all supported files from a folder")
+        self._act_add_folder.triggered.connect(self._on_add_folder)
+
         self._act_add = QAction("Add…", self)
         self._act_add.setShortcut(QKeySequence("Ctrl+O"))
         self._act_add.setToolTip("Add PDF/image files or folders (Ctrl+O)")
-        self._act_add.triggered.connect(self._on_add)
+        self._act_add.setMenu(add_menu)
+        # Default click (not the dropdown arrow) opens the file picker
+        self._act_add.triggered.connect(self._on_add_files)
         tb.addAction(self._act_add)
+        # Make the toolbar button show the dropdown arrow
+        btn = tb.widgetForAction(self._act_add)
+        if isinstance(btn, QToolButton):
+            btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
 
         tb.addSeparator()
-
-        self._act_remove = QAction("Remove", self)
-        # No global shortcut — Delete key is handled in keyPressEvent
-        # to support both file removal and annotation deletion.
-        self._act_remove.setToolTip("Remove selected files from list")
-        self._act_remove.triggered.connect(self._on_remove)
-        tb.addAction(self._act_remove)
 
         self._act_clear = QAction("Clear All", self)
         self._act_clear.setShortcut(QKeySequence("Ctrl+L"))
         self._act_clear.setToolTip("Remove all files from list (Ctrl+L)")
         self._act_clear.triggered.connect(self._on_clear)
         tb.addAction(self._act_clear)
-
-        tb.addSeparator()
-
-        self._act_move_up = QAction("▲ Up", self)
-        self._act_move_up.setShortcut(QKeySequence("Ctrl+Up"))
-        self._act_move_up.setToolTip("Move selected file up (Ctrl+Up)")
-        self._act_move_up.triggered.connect(self._on_move_up)
-        tb.addAction(self._act_move_up)
-
-        self._act_move_down = QAction("▼ Down", self)
-        self._act_move_down.setShortcut(QKeySequence("Ctrl+Down"))
-        self._act_move_down.setToolTip("Move selected file down (Ctrl+Down)")
-        self._act_move_down.triggered.connect(self._on_move_down)
-        tb.addAction(self._act_move_down)
 
         tb.addSeparator()
 
@@ -1229,9 +1346,7 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(list_label)
 
         self._file_list = FileListWidget()
-        self._file_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self._file_list.setAlternatingRowColors(True)
-        self._file_list.itemChanged.connect(self._on_item_checked)
+        self._file_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
         self._file_list.row_moved.connect(self._on_drag_reorder)
         self._file_list.files_dropped.connect(self._on_external_drop)
@@ -1245,6 +1360,7 @@ class MainWindow(QMainWindow):
         self._preview.annotation_moved.connect(self._on_annotation_moved)
         self._preview.annotation_edit_requested.connect(self._on_annotation_edit)
         self._preview.annotation_delete_requested.connect(self._on_annotation_delete)
+        self._preview.mode_changed.connect(self._on_preview_mode_changed)
         self._splitter.addWidget(self._preview)
 
         self._splitter.setSizes([400, 500])
@@ -1290,11 +1406,6 @@ class MainWindow(QMainWindow):
         self._output_name.setMinimumWidth(200)
         output_row.addWidget(self._output_name, stretch=1)
 
-        self._btn_preview_merged = QPushButton("Preview Merged")
-        self._btn_preview_merged.setToolTip("Preview what the merged PDF will look like")
-        self._btn_preview_merged.clicked.connect(self._on_preview_merged)
-        output_row.addWidget(self._btn_preview_merged)
-
         self._btn_save = QPushButton("Save Merged PDF")
         self._btn_save.setShortcut(QKeySequence("Ctrl+S"))
         self._btn_save.setToolTip("Merge included files and save (Ctrl+S)")
@@ -1317,8 +1428,10 @@ class MainWindow(QMainWindow):
                 if pw.selected is not None:
                     self._on_annotation_delete(pw.selected)
                     return
-            # Otherwise remove selected files from the list
-            self._on_remove()
+            # Otherwise remove the currently selected file
+            row = self._file_list.currentRow()
+            if row >= 0:
+                self._on_row_remove(row)
             return
         super().keyPressEvent(event)
 
@@ -1354,16 +1467,17 @@ class MainWindow(QMainWindow):
         self._file_list.blockSignals(True)
         self._file_list.clear()
 
-        for entry in self._model.entries:
+        for i, entry in enumerate(self._model.entries):
             item = QListWidgetItem()
-            item.setText(self._format_entry(entry))
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setCheckState(
-                Qt.CheckState.Checked if entry.included else Qt.CheckState.Unchecked
-            )
-            if not entry.included:
-                item.setForeground(QColor(160, 160, 160))
+            item.setSizeHint(QSize(0, 30))
             self._file_list.addItem(item)
+
+            row_widget = FileRowWidget(i, entry, self._format_entry(entry))
+            row_widget.include_toggled.connect(self._on_row_include)
+            row_widget.move_up_clicked.connect(self._on_row_move_up)
+            row_widget.move_down_clicked.connect(self._on_row_move_down)
+            row_widget.remove_clicked.connect(self._on_row_remove)
+            self._file_list.setItemWidget(item, row_widget)
 
         self._file_list.blockSignals(False)
 
@@ -1395,27 +1509,17 @@ class MainWindow(QMainWindow):
     # Toolbar actions
     # ══════════════════════════════════════════════════════════
 
-    def _on_add(self) -> None:
-        """Open a file dialog that allows selecting both files and folders."""
-        dlg = QFileDialog(self, "Add Files or Folders")
-        dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-        dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        dlg.setNameFilter(_file_filter() + ";;All files (*)")
+    def _on_add_files(self) -> None:
+        """Open native file picker for PDFs and images."""
+        paths, _ = QFileDialog.getOpenFileNames(self, "Add Files", "", _file_filter())
+        if paths:
+            self._add_paths([Path(p) for p in paths])
 
-        # Override accept so that selecting a directory doesn't enter it
-        # but instead returns it as a selected path.
-        original_accept = dlg.accept
-
-        def _custom_accept() -> None:  # noqa: ANN202
-            QDialog.accept(dlg)
-
-        dlg.accept = _custom_accept  # type: ignore[assignment]
-
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-
-        paths = [Path(p) for p in dlg.selectedFiles()]
-        self._add_paths(paths)
+    def _on_add_folder(self) -> None:
+        """Open native folder picker, then scan recursively."""
+        folder = QFileDialog.getExistingDirectory(self, "Add Folder")
+        if folder:
+            self._add_paths([Path(folder)])
 
     def _add_paths(self, paths: List[Path]) -> None:
         """Route a list of paths to the model — files added directly, folders scanned."""
@@ -1430,13 +1534,6 @@ class MainWindow(QMainWindow):
         elif paths:
             self._statusbar.showMessage("No new files added (duplicates or unsupported).", 3000)
 
-    def _on_remove(self) -> None:
-        indices = sorted(set(idx.row() for idx in self._file_list.selectedIndexes()), reverse=True)
-        if indices:
-            self._model.remove(indices)
-            if self._file_list.currentRow() < 0:
-                self._preview.show_placeholder()
-
     def _on_clear(self) -> None:
         if len(self._model) == 0:
             return
@@ -1448,18 +1545,6 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             self._model.clear()
             self._preview.show_placeholder()
-
-    def _on_move_up(self) -> None:
-        row = self._file_list.currentRow()
-        if row > 0:
-            self._model.move_up(row)
-            self._file_list.setCurrentRow(row - 1)
-
-    def _on_move_down(self) -> None:
-        row = self._file_list.currentRow()
-        if 0 <= row < len(self._model) - 1:
-            self._model.move_down(row)
-            self._file_list.setCurrentRow(row + 1)
 
     def _on_annotate_toggled(self, checked: bool) -> None:
         """Toggle annotation placement mode."""
@@ -1486,30 +1571,56 @@ class MainWindow(QMainWindow):
         self._add_paths([Path(p) for p in paths])
 
     # ══════════════════════════════════════════════════════════
-    # Checkbox
+    # Inline row actions
     # ══════════════════════════════════════════════════════════
 
-    def _on_item_checked(self, item: QListWidgetItem) -> None:
-        row = self._file_list.row(item)
-        if row < 0 or row >= len(self._model):
-            return
-        is_checked = item.checkState() == Qt.CheckState.Checked
-        self._model.set_included(row, is_checked)
+    def _on_row_include(self, row: int, checked: bool) -> None:
+        if 0 <= row < len(self._model):
+            self._model.set_included(row, checked)
+
+    def _on_row_move_up(self, row: int) -> None:
+        if row > 0:
+            self._model.move_up(row)
+            self._file_list.setCurrentRow(row - 1)
+
+    def _on_row_move_down(self, row: int) -> None:
+        if 0 <= row < len(self._model) - 1:
+            self._model.move_down(row)
+            self._file_list.setCurrentRow(row + 1)
+
+    def _on_row_remove(self, row: int) -> None:
+        if 0 <= row < len(self._model):
+            self._model.remove([row])
+            if self._file_list.count() == 0:
+                self._preview.show_placeholder()
 
     # ══════════════════════════════════════════════════════════
     # Preview
     # ══════════════════════════════════════════════════════════
 
     def _on_selection_changed(self, row: int) -> None:
+        """When a file is clicked in the list, show its single-page preview."""
         if 0 <= row < len(self._model):
             self._preview.show_file(self._model[row].path)
         else:
             self._preview.show_placeholder()
 
-    def _on_preview_merged(self) -> None:
+    def _on_preview_mode_changed(self, mode: str) -> None:
+        """Handle the Single/Merged toggle in the preview panel."""
+        if mode == "merged":
+            self._show_merged_preview()
+        else:
+            row = self._file_list.currentRow()
+            if 0 <= row < len(self._model):
+                self._preview.show_file(self._model[row].path)
+            else:
+                self._preview.show_placeholder()
+
+    def _show_merged_preview(self) -> None:
+        """Render and display the merged preview."""
         included = self._model.included_entries()
         if not included:
-            QMessageBox.information(self, "Nothing to preview", "No files are included for merging.")
+            self._preview.show_placeholder("No included files to preview.")
             return
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
