@@ -377,7 +377,11 @@ class PreviewPanel(QFrame):
         self._render_single_page()
         self._update_nav()
 
-    def show_merged(self, entries: List[FileEntry]) -> None:
+    def show_merged(
+        self,
+        entries: List[FileEntry],
+        options: Optional["OutputOptions"] = None,
+    ) -> None:
         self._merged_mode = True
         self._current_path = None
 
@@ -390,7 +394,8 @@ class PreviewPanel(QFrame):
         self._clear_pages()
 
         pixmaps = MergeService.render_merged_preview(
-            entries, max_width=self._preview_width(), max_height=800
+            entries, max_width=self._preview_width(), max_height=800,
+            options=options,
         )
         if not pixmaps:
             self._show_placeholder("Could not render merged preview.")
@@ -1021,7 +1026,7 @@ class MainWindow(QMainWindow):
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             self._statusbar.showMessage("Rendering merged preview…")
-            self._preview.show_merged(self._model.entries)
+            self._preview.show_merged(self._model.entries, options=self._output_options)
             self._statusbar.showMessage(f"Merged preview: {len(included)} file(s)", 3000)
         finally:
             QApplication.restoreOverrideCursor()
