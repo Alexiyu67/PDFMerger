@@ -55,17 +55,16 @@ The output binary will be in the `dist/` folder.
 
 ## Keyboard shortcuts
 
-| Action         | Shortcut         |
-|----------------|------------------|
-| Add files      | `Ctrl+O`         |
-| Add folder     | `Ctrl+Shift+O`   |
-| Remove         | `Delete`         |
-| Move up        | `Ctrl+Up`        |
-| Move down      | `Ctrl+Down`      |
-| Save merged    | `Ctrl+S`         |
-| Clear list     | `Ctrl+L`         |
-| About          | `F1`             |
-| Quit           | `Ctrl+Q`         |
+| Action               | Shortcut         |
+|----------------------|------------------|
+| Add files/folders    | `Ctrl+O`         |
+| Delete (file or ann.)| `Delete`         |
+| Move up              | `Ctrl+Up`        |
+| Move down            | `Ctrl+Down`      |
+| Save merged          | `Ctrl+S`         |
+| Clear list           | `Ctrl+L`         |
+| About                | `F1`             |
+| Quit                 | `Ctrl+Q`         |
 
 ## Architecture
 

@@ -358,9 +358,12 @@ class AnnotatedPageWidget(QWidget):
         self._page_index = page_index
         self._annotations = annotations
         self.setFixedSize(pixmap.size())
-        self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+        self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
         self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self.setMouseTracking(True)
+
+        # Mode
+        self._annotate_mode: bool = False
 
         # Selection / drag state
         self._selected: Optional[TextAnnotation] = None
@@ -374,6 +377,17 @@ class AnnotatedPageWidget(QWidget):
     @property
     def selected(self) -> Optional[TextAnnotation]:
         return self._selected
+
+    @property
+    def annotate_mode(self) -> bool:
+        return self._annotate_mode
+
+    @annotate_mode.setter
+    def annotate_mode(self, on: bool) -> None:
+        self._annotate_mode = on
+        # Update cursor for current state
+        default = Qt.CursorShape.CrossCursor if on else Qt.CursorShape.ArrowCursor
+        self.setCursor(QCursor(default))
 
     def set_selected(self, ann: Optional[TextAnnotation]) -> None:
         if self._selected is not ann:
@@ -505,15 +519,16 @@ class AnnotatedPageWidget(QWidget):
                 self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
                 self.update()
             else:
-                # Deselect, then signal for new annotation
+                # Deselect; only create new annotation if annotate mode is on
                 self._selected = None
                 self.update()
-                pw = self._pixmap.width()
-                ph = self._pixmap.height()
-                if pw > 0 and ph > 0:
-                    x_ratio = max(0.0, min(1.0, pos.x() / pw))
-                    y_ratio = max(0.0, min(1.0, pos.y() / ph))
-                    self.clicked.emit(self._page_index, x_ratio, y_ratio)
+                if self._annotate_mode:
+                    pw = self._pixmap.width()
+                    ph = self._pixmap.height()
+                    if pw > 0 and ph > 0:
+                        x_ratio = max(0.0, min(1.0, pos.x() / pw))
+                        y_ratio = max(0.0, min(1.0, pos.y() / ph))
+                        self.clicked.emit(self._page_index, x_ratio, y_ratio)
 
         elif event.button() == Qt.MouseButton.RightButton:
             hit = self._hit_test(pos)
@@ -544,7 +559,8 @@ class AnnotatedPageWidget(QWidget):
             if hit is not None:
                 self.setCursor(QCursor(Qt.CursorShape.OpenHandCursor))
             else:
-                self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+                default = Qt.CursorShape.CrossCursor if self._annotate_mode else Qt.CursorShape.ArrowCursor
+                self.setCursor(QCursor(default))
 
         super().mouseMoveEvent(event)
 
@@ -558,7 +574,8 @@ class AnnotatedPageWidget(QWidget):
             if hit is not None:
                 self.setCursor(QCursor(Qt.CursorShape.OpenHandCursor))
             else:
-                self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+                default = Qt.CursorShape.CrossCursor if self._annotate_mode else Qt.CursorShape.ArrowCursor
+                self.setCursor(QCursor(default))
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
@@ -698,6 +715,7 @@ class PreviewPanel(QFrame):
         self._current_page: int = 0
         self._page_count: int = 0
         self._merged_mode: bool = False
+        self._annotate_mode: bool = False
         self._page_widgets: List[AnnotatedPageWidget] = []
         self._build_ui()
         self._show_placeholder()
@@ -780,6 +798,7 @@ class PreviewPanel(QFrame):
         for i, pix in enumerate(pixmaps):
             page_anns = [a for a in all_annotations if a.page == i]
             page_widget = AnnotatedPageWidget(pix, i, page_anns)
+            page_widget.annotate_mode = self._annotate_mode
             page_widget.clicked.connect(self.annotation_requested)
             page_widget.annotation_moved.connect(self.annotation_moved)
             page_widget.annotation_edit_requested.connect(self.annotation_edit_requested)
@@ -787,7 +806,7 @@ class PreviewPanel(QFrame):
             self._page_layout.addWidget(page_widget)
             self._page_widgets.append(page_widget)
 
-            num_label = QLabel(f"— Page {i + 1} —  (click to add, drag to move, double-click to edit)")
+            num_label = QLabel(f"— Page {i + 1} —  (double-click annotation to edit, right-click for menu)")
             num_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             num_label.setStyleSheet("color: #888; font-size: 11px;")
             self._page_layout.addWidget(num_label)
@@ -797,6 +816,12 @@ class PreviewPanel(QFrame):
         self._page_label.setText(f"{self._page_count} page(s)")
         self._btn_prev.setVisible(False)
         self._btn_next.setVisible(False)
+
+    def set_annotate_mode(self, on: bool) -> None:
+        """Toggle annotation placement mode on/off for all page widgets."""
+        self._annotate_mode = on
+        for pw in self._page_widgets:
+            pw.annotate_mode = on
 
     def show_placeholder(self, text: str = "Select a file to preview") -> None:
         self._show_placeholder(text)
@@ -1127,22 +1152,17 @@ class MainWindow(QMainWindow):
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.addToolBar(tb)
 
-        self._act_add_files = QAction("Add Files", self)
-        self._act_add_files.setShortcut(QKeySequence("Ctrl+O"))
-        self._act_add_files.setToolTip("Add PDF or image files (Ctrl+O)")
-        self._act_add_files.triggered.connect(self._on_add_files)
-        tb.addAction(self._act_add_files)
-
-        self._act_add_folder = QAction("Add Folder", self)
-        self._act_add_folder.setShortcut(QKeySequence("Ctrl+Shift+O"))
-        self._act_add_folder.setToolTip("Add all supported files from a folder (Ctrl+Shift+O)")
-        self._act_add_folder.triggered.connect(self._on_add_folder)
-        tb.addAction(self._act_add_folder)
+        self._act_add = QAction("Add…", self)
+        self._act_add.setShortcut(QKeySequence("Ctrl+O"))
+        self._act_add.setToolTip("Add PDF/image files or folders (Ctrl+O)")
+        self._act_add.triggered.connect(self._on_add)
+        tb.addAction(self._act_add)
 
         tb.addSeparator()
 
         self._act_remove = QAction("Remove", self)
-        self._act_remove.setShortcut(QKeySequence.StandardKey.Delete)
+        # No global shortcut — Delete key is handled in keyPressEvent
+        # to support both file removal and annotation deletion.
         self._act_remove.setToolTip("Remove selected files from list")
         self._act_remove.triggered.connect(self._on_remove)
         tb.addAction(self._act_remove)
@@ -1166,6 +1186,16 @@ class MainWindow(QMainWindow):
         self._act_move_down.setToolTip("Move selected file down (Ctrl+Down)")
         self._act_move_down.triggered.connect(self._on_move_down)
         tb.addAction(self._act_move_down)
+
+        tb.addSeparator()
+
+        self._act_annotate = QAction("✏ Annotate", self)
+        self._act_annotate.setCheckable(True)
+        self._act_annotate.setToolTip(
+            "Toggle annotation mode — click on merged preview pages to place text"
+        )
+        self._act_annotate.toggled.connect(self._on_annotate_toggled)
+        tb.addAction(self._act_annotate)
 
         tb.addSeparator()
 
@@ -1219,41 +1249,78 @@ class MainWindow(QMainWindow):
 
         self._splitter.setSizes([400, 500])
 
-        # Bottom bar
-        bottom = QHBoxLayout()
-        root_layout.addLayout(bottom)
+        # Options bar — page numbers, watermark, annotations
+        options_row = QHBoxLayout()
+        options_row.setContentsMargins(0, 4, 0, 0)
+        root_layout.addLayout(options_row)
 
-        bottom.addWidget(QLabel("Output file:"))
+        self._chk_page_numbers = QCheckBox("Page Numbers")
+        self._chk_page_numbers.setToolTip("Add page numbers to the merged PDF")
+        self._chk_page_numbers.toggled.connect(self._on_quick_toggle_page_numbers)
+        options_row.addWidget(self._chk_page_numbers)
 
-        self._output_name = QLineEdit("merged.pdf")
-        self._output_name.setPlaceholderText("merged.pdf")
-        self._output_name.setMinimumWidth(250)
-        bottom.addWidget(self._output_name, stretch=1)
+        self._chk_watermark = QCheckBox("Watermark")
+        self._chk_watermark.setToolTip("Add watermark text to the merged PDF")
+        self._chk_watermark.toggled.connect(self._on_quick_toggle_watermark)
+        options_row.addWidget(self._chk_watermark)
 
-        self._btn_preview_merged = QPushButton("Preview Merged")
-        self._btn_preview_merged.setToolTip("Preview what the merged PDF will look like")
-        self._btn_preview_merged.clicked.connect(self._on_preview_merged)
-        bottom.addWidget(self._btn_preview_merged)
+        self._btn_settings = QPushButton("Settings…")
+        self._btn_settings.setToolTip(
+            "Configure page number format, watermark text, and other output options"
+        )
+        self._btn_settings.clicked.connect(self._on_output_options)
+        options_row.addWidget(self._btn_settings)
 
-        self._btn_options = QPushButton("Options…")
-        self._btn_options.setToolTip("Configure page numbers, watermark, and other output options")
-        self._btn_options.clicked.connect(self._on_output_options)
-        bottom.addWidget(self._btn_options)
+        options_row.addStretch()
 
         self._btn_clear_annotations = QPushButton("Clear Annotations")
         self._btn_clear_annotations.setToolTip("Remove all text annotations")
         self._btn_clear_annotations.clicked.connect(self._on_clear_annotations)
-        bottom.addWidget(self._btn_clear_annotations)
+        options_row.addWidget(self._btn_clear_annotations)
+
+        # Output bar — filename, preview, save
+        output_row = QHBoxLayout()
+        output_row.setContentsMargins(0, 2, 0, 0)
+        root_layout.addLayout(output_row)
+
+        output_row.addWidget(QLabel("Output:"))
+
+        self._output_name = QLineEdit("merged.pdf")
+        self._output_name.setPlaceholderText("merged.pdf")
+        self._output_name.setMinimumWidth(200)
+        output_row.addWidget(self._output_name, stretch=1)
+
+        self._btn_preview_merged = QPushButton("Preview Merged")
+        self._btn_preview_merged.setToolTip("Preview what the merged PDF will look like")
+        self._btn_preview_merged.clicked.connect(self._on_preview_merged)
+        output_row.addWidget(self._btn_preview_merged)
 
         self._btn_save = QPushButton("Save Merged PDF")
         self._btn_save.setShortcut(QKeySequence("Ctrl+S"))
         self._btn_save.setToolTip("Merge included files and save (Ctrl+S)")
         self._btn_save.clicked.connect(self._on_save)
-        bottom.addWidget(self._btn_save)
+        output_row.addWidget(self._btn_save)
 
     def _build_statusbar(self) -> None:
         self._statusbar = QStatusBar()
         self.setStatusBar(self._statusbar)
+
+    # ══════════════════════════════════════════════════════════
+    # Global key handling
+    # ══════════════════════════════════════════════════════════
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        """Route Delete/Backspace: annotation delete if one is selected, else file remove."""
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            # Check if any page widget has a selected annotation
+            for pw in self._preview._page_widgets:
+                if pw.selected is not None:
+                    self._on_annotation_delete(pw.selected)
+                    return
+            # Otherwise remove selected files from the list
+            self._on_remove()
+            return
+        super().keyPressEvent(event)
 
     # ══════════════════════════════════════════════════════════
     # OS drag-and-drop on main window
@@ -1319,7 +1386,7 @@ class MainWindow(QMainWindow):
         included = len(self._model.included_entries())
         if total == 0:
             self._statusbar.showMessage(
-                "No files added. Use 'Add Files', 'Add Folder', or drag and drop to begin."
+                "No files added. Use 'Add…' or drag and drop files/folders to begin."
             )
         else:
             self._statusbar.showMessage(f"{total} file(s) — {included} included for merge")
@@ -1328,19 +1395,40 @@ class MainWindow(QMainWindow):
     # Toolbar actions
     # ══════════════════════════════════════════════════════════
 
-    def _on_add_files(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(self, "Add Files", "", _file_filter())
-        if paths:
-            added = self._model.add_files([Path(p) for p in paths])
-            if added == 0:
-                self._statusbar.showMessage("No new files added (duplicates or unsupported).", 3000)
+    def _on_add(self) -> None:
+        """Open a file dialog that allows selecting both files and folders."""
+        dlg = QFileDialog(self, "Add Files or Folders")
+        dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
+        dlg.setNameFilter(_file_filter() + ";;All files (*)")
 
-    def _on_add_folder(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Add Folder")
-        if folder:
-            added = self._model.add_folder(Path(folder))
-            if added == 0:
-                self._statusbar.showMessage("No supported files found in folder.", 3000)
+        # Override accept so that selecting a directory doesn't enter it
+        # but instead returns it as a selected path.
+        original_accept = dlg.accept
+
+        def _custom_accept() -> None:  # noqa: ANN202
+            QDialog.accept(dlg)
+
+        dlg.accept = _custom_accept  # type: ignore[assignment]
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        paths = [Path(p) for p in dlg.selectedFiles()]
+        self._add_paths(paths)
+
+    def _add_paths(self, paths: List[Path]) -> None:
+        """Route a list of paths to the model — files added directly, folders scanned."""
+        total_added = 0
+        for p in paths:
+            if p.is_dir():
+                total_added += self._model.add_folder(p)
+            elif p.is_file():
+                total_added += self._model.add_files([p])
+        if total_added > 0:
+            self._statusbar.showMessage(f"Added {total_added} file(s).", 3000)
+        elif paths:
+            self._statusbar.showMessage("No new files added (duplicates or unsupported).", 3000)
 
     def _on_remove(self) -> None:
         indices = sorted(set(idx.row() for idx in self._file_list.selectedIndexes()), reverse=True)
@@ -1373,6 +1461,16 @@ class MainWindow(QMainWindow):
             self._model.move_down(row)
             self._file_list.setCurrentRow(row + 1)
 
+    def _on_annotate_toggled(self, checked: bool) -> None:
+        """Toggle annotation placement mode."""
+        self._preview.set_annotate_mode(checked)
+        if checked:
+            self._statusbar.showMessage(
+                "✏ Annotate mode ON — click on merged preview pages to place text", 3000
+            )
+        else:
+            self._statusbar.showMessage("✏ Annotate mode OFF", 2000)
+
     # ══════════════════════════════════════════════════════════
     # Drag-and-drop handlers
     # ══════════════════════════════════════════════════════════
@@ -1385,17 +1483,7 @@ class MainWindow(QMainWindow):
         self._add_dropped_paths(paths)
 
     def _add_dropped_paths(self, paths: List[Path]) -> None:
-        total_added = 0
-        for p in paths:
-            p = Path(p)
-            if p.is_dir():
-                total_added += self._model.add_folder(p)
-            elif p.is_file():
-                total_added += self._model.add_files([p])
-        if total_added > 0:
-            self._statusbar.showMessage(f"Added {total_added} file(s) via drag and drop.", 3000)
-        elif paths:
-            self._statusbar.showMessage("No supported files found in dropped items.", 3000)
+        self._add_paths([Path(p) for p in paths])
 
     # ══════════════════════════════════════════════════════════
     # Checkbox
@@ -1439,11 +1527,29 @@ class MainWindow(QMainWindow):
         """Open the output options dialog."""
         dlg = OutputOptionsDialog(self._output_options, parent=self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            # Preserve annotations — the dialog only edits page numbers / watermark
             saved_annotations = self._output_options.annotations
             self._output_options = dlg.get_options()
             self._output_options.annotations = saved_annotations
+            self._sync_option_checkboxes()
             self._statusbar.showMessage("Output options updated.", 3000)
+
+    def _on_quick_toggle_page_numbers(self, checked: bool) -> None:
+        """Quick-toggle page numbers from the options bar checkbox."""
+        self._output_options.page_numbers.enabled = checked
+
+    def _on_quick_toggle_watermark(self, checked: bool) -> None:
+        """Quick-toggle watermark from the options bar checkbox."""
+        self._output_options.watermark.enabled = checked
+
+    def _sync_option_checkboxes(self) -> None:
+        """Sync the quick-toggle checkboxes with the current output options."""
+        self._chk_page_numbers.blockSignals(True)
+        self._chk_page_numbers.setChecked(self._output_options.page_numbers.enabled)
+        self._chk_page_numbers.blockSignals(False)
+
+        self._chk_watermark.blockSignals(True)
+        self._chk_watermark.setChecked(self._output_options.watermark.enabled)
+        self._chk_watermark.blockSignals(False)
 
     # ══════════════════════════════════════════════════════════
     # Annotations
