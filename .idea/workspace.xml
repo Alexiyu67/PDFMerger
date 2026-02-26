@@ -6,8 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="feat: scrollable multi-page preview in single-file mode&#10;&#10;- Render all pages of a file into the scroll area (not one at a time)&#10;- Page divider labels between pages (&quot;— Page 3 of 10 —&quot;)&#10;- Prev/Next buttons scroll to the page instead of re-rendering&#10;- _single_page_widgets list tracks page labels for scroll targeting">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build.py" beforeDir="false" afterPath="$PROJECT_DIR$/build.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -70,7 +68,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1772107516868</updated>
-      <workItem from="1772107517890" duration="7040000" />
+      <workItem from="1772107517890" duration="8329000" />
     </task>
     <task id="LOCAL-00001" summary="feat: project scaffolding and minimal window launch&#10;&#10;- Create pdfjoiner package with __init__, model, service, view stubs&#10;- Add main.py entry point with PySide6 QApplication bootstrap&#10;- Add pyproject.toml with project metadata and dependencies&#10;- Add requirements.txt (PySide6, PyMuPDF)&#10;- Add .gitignore for Python/IDE/OS artifacts&#10;- Minimal MainWindow launches at 900x600 with placeholder label">
       <option name="closed" value="true" />

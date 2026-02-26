@@ -14,15 +14,15 @@ Pre-built binaries — no Python required. Pick your platform:
 
 | Platform | Link                                                                                                 |
 |----------|------------------------------------------------------------------------------------------------------|
-| **Windows** (10/11, 64-bit) | [⬇ PDFJoiner-Windows.zip](https://gitAlexiyu67<br//PDFJoiner/releases/latest/download/PDFJoiner-Windows.zip)  |
-| **macOS** (Apple Silicon) | [⬇ PDFJoiner-macOS.zip](https://gitAlexiyu67<br//PDFJoiner/releases/latest/download/PDFJoiner-macOS.zip)      |
-| **Linux** (x64, Ubuntu 22.04+) | [⬇ PDFJoiner-Linux.tar.gz](https://gitAlexiyu67<br//PDFJoiner/releases/latest/download/PDFJoiner-Linux.tar.gz) |
+| **Windows** (10/11, 64-bit) | [⬇ PDFJoiner-Windows.zip](https://github.com/Alexiyu67/PDFMerger/releases/latest/download/PDFJoiner-Windows.zip) |
+| **macOS** (Apple Silicon) | [⬇ PDFJoiner-macOS.zip](https://github.com/Alexiyu67/PDFMerger/releases/latest/download/PDFJoiner-macOS.zip) |
+| **Linux** (x64, Ubuntu 22.04+) | [⬇ PDFJoiner-Linux.tar.gz](https://github.com/Alexiyu67/PDFMerger/releases/latest/download/PDFJoiner-Linux.tar.gz) |
 
 > **First time on macOS?** After extracting, right-click → Open to bypass Gatekeeper.
 >
 > **Linux:** Make it executable with `chmod +x PDFJoiner` after extracting.
 
-All releases: [Releases page](https://gitAlexiyu67/PDFJoiner/releases)
+All releases: [Releases page](https://github.com/Alexiyu67/PDFMerger/releases)
 
 ---
 
