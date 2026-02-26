@@ -4,10 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="feat: add MergeService for preview rendering and PDF merging&#10;&#10;- render_preview / render_thumbnail via PyMuPDF → QPixmap&#10;- render_merged_preview for full merged document preview&#10;- merge() combines included PDFs and images into single output PDF&#10;- Images inserted at native resolution, corrupt files skipped gracefully&#10;- Smoke test in main.py exercises page count, thumbnails, and merge">
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdfjoiner/view.py" beforeDir="false" afterPath="$PROJECT_DIR$/pdfjoiner/view.py" afterDir="false" />
-    </list>
+    <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="feat: add drag-and-drop reordering and OS file drops&#10;&#10;- FileListWidget subclass with internal drag reorder via model&#10;- External file/folder drops from OS file manager onto file list&#10;- Main window also accepts drops anywhere (toolbar, preview, etc.)&#10;- Folders recursively scanned, unsupported files silently skipped&#10;- Status bar hints at drag-and-drop in empty state" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -69,7 +66,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1772107516868</updated>
-      <workItem from="1772107517890" duration="934000" />
+      <workItem from="1772107517890" duration="1244000" />
     </task>
     <task id="LOCAL-00001" summary="feat: project scaffolding and minimal window launch&#10;&#10;- Create pdfjoiner package with __init__, model, service, view stubs&#10;- Add main.py entry point with PySide6 QApplication bootstrap&#10;- Add pyproject.toml with project metadata and dependencies&#10;- Add requirements.txt (PySide6, PyMuPDF)&#10;- Add .gitignore for Python/IDE/OS artifacts&#10;- Minimal MainWindow launches at 900x600 with placeholder label">
       <option name="closed" value="true" />
@@ -95,7 +92,31 @@
       <option name="project" value="LOCAL" />
       <updated>1772108312443</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="feat: build main window layout with file list and merge controls&#10;&#10;- Toolbar: Add Files, Add Folder, Remove, Move Up/Down with shortcuts&#10;- File list with checkboxes for include/exclude, grayed-out styling&#10;- Multi-select support for bulk removal&#10;- Output filename field + Save Merged PDF button with save dialog&#10;- Status bar showing file count and included count&#10;- Preview placeholder panel ready for Step 5&#10;- Remove smoke test from main.py — UI is now the interface">
+      <option name="closed" value="true" />
+      <created>1772108482043</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1772108482043</updated>
+    </task>
+    <task id="LOCAL-00005" summary="feat: add preview panel with page navigation and merged preview&#10;&#10;- PreviewPanel widget with single-file and merged preview modes&#10;- Single-file: renders current page, Prev/Next navigation for PDFs&#10;- Merged: renders all included pages stacked vertically, scrollable&#10;- Preview Merged button in bottom bar&#10;- Auto-preview on file list selection change">
+      <option name="closed" value="true" />
+      <created>1772108627584</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1772108627584</updated>
+    </task>
+    <task id="LOCAL-00006" summary="feat: add drag-and-drop reordering and OS file drops&#10;&#10;- FileListWidget subclass with internal drag reorder via model&#10;- External file/folder drops from OS file manager onto file list&#10;- Main window also accepts drops anywhere (toolbar, preview, etc.)&#10;- Folders recursively scanned, unsupported files silently skipped&#10;- Status bar hints at drag-and-drop in empty state">
+      <option name="closed" value="true" />
+      <created>1772108770881</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1772108770881</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -105,6 +126,9 @@
     <MESSAGE value="feat: project scaffolding and minimal window launch&#10;&#10;- Create pdfjoiner package with __init__, model, service, view stubs&#10;- Add main.py entry point with PySide6 QApplication bootstrap&#10;- Add pyproject.toml with project metadata and dependencies&#10;- Add requirements.txt (PySide6, PyMuPDF)&#10;- Add .gitignore for Python/IDE/OS artifacts&#10;- Minimal MainWindow launches at 900x600 with placeholder label" />
     <MESSAGE value="feat: add data model with FileEntry and ProjectModel&#10;&#10;- FileEntry dataclass with path, included flag, page_count, thumbnail&#10;- ProjectModel with add_files, add_folder, remove, clear, move, toggle&#10;- Skips unsupported extensions and duplicate paths on add&#10;- Single list_changed signal emitted on every mutation&#10;- Smoke test in main.py to verify model operations via console" />
     <MESSAGE value="feat: add MergeService for preview rendering and PDF merging&#10;&#10;- render_preview / render_thumbnail via PyMuPDF → QPixmap&#10;- render_merged_preview for full merged document preview&#10;- merge() combines included PDFs and images into single output PDF&#10;- Images inserted at native resolution, corrupt files skipped gracefully&#10;- Smoke test in main.py exercises page count, thumbnails, and merge" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: add MergeService for preview rendering and PDF merging&#10;&#10;- render_preview / render_thumbnail via PyMuPDF → QPixmap&#10;- render_merged_preview for full merged document preview&#10;- merge() combines included PDFs and images into single output PDF&#10;- Images inserted at native resolution, corrupt files skipped gracefully&#10;- Smoke test in main.py exercises page count, thumbnails, and merge" />
+    <MESSAGE value="feat: build main window layout with file list and merge controls&#10;&#10;- Toolbar: Add Files, Add Folder, Remove, Move Up/Down with shortcuts&#10;- File list with checkboxes for include/exclude, grayed-out styling&#10;- Multi-select support for bulk removal&#10;- Output filename field + Save Merged PDF button with save dialog&#10;- Status bar showing file count and included count&#10;- Preview placeholder panel ready for Step 5&#10;- Remove smoke test from main.py — UI is now the interface" />
+    <MESSAGE value="feat: add preview panel with page navigation and merged preview&#10;&#10;- PreviewPanel widget with single-file and merged preview modes&#10;- Single-file: renders current page, Prev/Next navigation for PDFs&#10;- Merged: renders all included pages stacked vertically, scrollable&#10;- Preview Merged button in bottom bar&#10;- Auto-preview on file list selection change" />
+    <MESSAGE value="feat: add drag-and-drop reordering and OS file drops&#10;&#10;- FileListWidget subclass with internal drag reorder via model&#10;- External file/folder drops from OS file manager onto file list&#10;- Main window also accepts drops anywhere (toolbar, preview, etc.)&#10;- Folders recursively scanned, unsupported files silently skipped&#10;- Status bar hints at drag-and-drop in empty state" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: add drag-and-drop reordering and OS file drops&#10;&#10;- FileListWidget subclass with internal drag reorder via model&#10;- External file/folder drops from OS file manager onto file list&#10;- Main window also accepts drops anywhere (toolbar, preview, etc.)&#10;- Folders recursively scanned, unsupported files silently skipped&#10;- Status bar hints at drag-and-drop in empty state" />
   </component>
 </project>

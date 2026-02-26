@@ -6,11 +6,11 @@ an image is simply opened as a single-page document.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
 import fitz  # PyMuPDF
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import QImage, QPixmap
 
 from pdfjoiner.model import FileEntry
@@ -31,10 +31,12 @@ def _page_to_pixmap(
     max_height: int = 600,
 ) -> QPixmap:
     """Render a fitz Page to a QPixmap, scaled to fit within max dimensions."""
-    # Calculate zoom to fit within bounds while preserving aspect ratio
     rect = page.rect
-    zoom_x = max_width / rect.width if rect.width > 0 else 1.0
-    zoom_y = max_height / rect.height if rect.height > 0 else 1.0
+    if rect.width <= 0 or rect.height <= 0:
+        return QPixmap()
+
+    zoom_x = max_width / rect.width
+    zoom_y = max_height / rect.height
     zoom = min(zoom_x, zoom_y, 2.0)  # cap at 2x to avoid huge renders
 
     mat = fitz.Matrix(zoom, zoom)
@@ -43,6 +45,18 @@ def _page_to_pixmap(
     # Convert fitz Pixmap → QImage → QPixmap
     qimg = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format.Format_RGB888)
     return QPixmap.fromImage(qimg)
+
+
+@dataclass
+class MergeResult:
+    """Result returned by MergeService.merge()."""
+
+    page_count: int = 0
+    skipped: List[str] = field(default_factory=list)
+
+    @property
+    def has_warnings(self) -> bool:
+        return len(self.skipped) > 0
 
 
 class MergeService:
@@ -59,6 +73,18 @@ class MergeService:
         except Exception:
             return 1
 
+    # ── Validate ───────────────────────────────────────────────
+
+    @staticmethod
+    def can_open(path: Path) -> bool:
+        """Return True if the file can be opened by PyMuPDF."""
+        try:
+            with _open_document(path) as doc:
+                _ = doc.page_count
+            return True
+        except Exception:
+            return False
+
     # ── Single-file preview ────────────────────────────────────
 
     @staticmethod
@@ -70,14 +96,7 @@ class MergeService:
     ) -> Optional[QPixmap]:
         """Render a single page/image to a QPixmap.
 
-        Args:
-            path: File to render.
-            page: Page index (0-based). Ignored for images.
-            max_width: Maximum pixel width of the result.
-            max_height: Maximum pixel height of the result.
-
-        Returns:
-            QPixmap or None if the file can't be rendered.
+        Returns QPixmap or None if the file can't be rendered.
         """
         try:
             with _open_document(path) as doc:
@@ -93,8 +112,7 @@ class MergeService:
         """Render a small square-ish thumbnail for the file list."""
         try:
             with _open_document(path) as doc:
-                pix = _page_to_pixmap(doc[0], max_width=size, max_height=size)
-                return pix
+                return _page_to_pixmap(doc[0], max_width=size, max_height=size)
         except Exception:
             return None
 
@@ -125,7 +143,7 @@ class MergeService:
     # ── Merge to PDF ───────────────────────────────────────────
 
     @staticmethod
-    def merge(entries: List[FileEntry], output: Path) -> int:
+    def merge(entries: List[FileEntry], output: Path) -> MergeResult:
         """Merge included entries into a single PDF.
 
         PDFs are inserted page-by-page. Images are inserted as full pages
@@ -136,7 +154,7 @@ class MergeService:
             output: Destination path for the merged PDF.
 
         Returns:
-            Total page count of the output PDF.
+            MergeResult with page count and list of skipped filenames.
 
         Raises:
             ValueError: If no included entries to merge.
@@ -146,6 +164,7 @@ class MergeService:
         if not included:
             raise ValueError("No files selected for merging.")
 
+        result = MergeResult()
         output_doc = fitz.open()  # new empty PDF
 
         for entry in included:
@@ -155,7 +174,7 @@ class MergeService:
                     output_doc.insert_pdf(src)
                 else:
                     # Image: convert to a single-page PDF, then insert
-                    img_pdf = fitz.open()  # temp single-page PDF
+                    img_pdf = fitz.open()
                     img_page = img_pdf.new_page(
                         width=src[0].rect.width,
                         height=src[0].rect.height,
@@ -165,11 +184,17 @@ class MergeService:
                     img_pdf.close()
                 src.close()
             except Exception as exc:
-                # Skip files that fail — don't abort the whole merge
-                print(f"Warning: skipping {entry.filename}: {exc}")
+                result.skipped.append(f"{entry.filename}: {exc}")
                 continue
 
-        total = output_doc.page_count
+        if output_doc.page_count == 0:
+            output_doc.close()
+            raise ValueError(
+                "All files failed to process. No output generated.\n\n"
+                + "\n".join(result.skipped)
+            )
+
+        result.page_count = output_doc.page_count
         output_doc.save(str(output))
         output_doc.close()
-        return total
+        return result

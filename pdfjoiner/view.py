@@ -5,10 +5,18 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QSize, QUrl, Signal
-from PySide6.QtGui import QAction, QColor, QDragEnterEvent, QDragMoveEvent, QDropEvent, QKeySequence, QPixmap
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QDragEnterEvent,
+    QDragMoveEvent,
+    QDropEvent,
+    QKeySequence,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -27,6 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from pdfjoiner import __version__
 from pdfjoiner.model import SUPPORTED_EXTENSIONS, FileEntry, ProjectModel, is_supported
 from pdfjoiner.service import MergeService
 
@@ -34,7 +43,12 @@ from pdfjoiner.service import MergeService
 def _file_filter() -> str:
     """Build a file dialog filter string from supported extensions."""
     exts = " ".join(f"*{e}" for e in sorted(SUPPORTED_EXTENSIONS))
-    return f"Supported files ({exts});;PDF files (*.pdf);;Images (*.jpg *.jpeg *.png *.bmp *.tiff *.tif);;All files (*)"
+    return (
+        f"Supported files ({exts});;"
+        f"PDF files (*.pdf);;"
+        f"Images (*.jpg *.jpeg *.png *.bmp *.tiff *.tif);;"
+        f"All files (*)"
+    )
 
 
 def _paths_from_mime(event) -> List[Path]:
@@ -71,35 +85,22 @@ class FileListWidget(QListWidget):
     - External OS file/folder drops (emits ``files_dropped``)
     """
 
-    # Internal reorder: (old_index, new_index)
     row_moved = Signal(int, int)
-
-    # External drop: list of Path objects
     files_dropped = Signal(list)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-
-        # Enable internal drag reordering
         self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
-
-        # Also accept external drops
         self.setAcceptDrops(True)
-
         self._drag_start_row: int = -1
 
-    # ── Internal reorder tracking ──────────────────────────────
-
     def startDrag(self, supportedActions) -> None:
-        """Record which row is being dragged before Qt moves it."""
         self._drag_start_row = self.currentRow()
         super().startDrag(supportedActions)
 
     def dropEvent(self, event: QDropEvent) -> None:
-        """Handle both internal reorder and external file drops."""
-
-        # External drop — files from OS
+        # External drop
         if event.source() is not self and event.mimeData().hasUrls():
             event.setDropAction(Qt.DropAction.CopyAction)
             event.accept()
@@ -110,30 +111,19 @@ class FileListWidget(QListWidget):
 
         # Internal reorder
         if event.source() is self and self._drag_start_row >= 0:
-            # Figure out the target row from drop position
             target_item = self.itemAt(event.position().toPoint())
-            if target_item is not None:
-                target_row = self.row(target_item)
-            else:
-                # Dropped below last item
-                target_row = self.count() - 1
-
+            target_row = self.row(target_item) if target_item else self.count() - 1
             old_row = self._drag_start_row
             self._drag_start_row = -1
-
             if old_row != target_row:
-                # Don't let QListWidget do its own move — we handle it via model
                 event.ignore()
                 self.row_moved.emit(old_row, target_row)
                 return
 
-        # Fallback
         super().dropEvent(event)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
-        """Accept drags from both internal and external sources."""
         if event.source() is self:
-            # Internal reorder
             event.accept()
         elif _has_acceptable_files(event):
             event.acceptProposedAction()
@@ -141,7 +131,6 @@ class FileListWidget(QListWidget):
             event.ignore()
 
     def dragMoveEvent(self, event: QDragMoveEvent) -> None:
-        """Keep accepting during drag movement."""
         if event.source() is self:
             event.accept()
         elif event.mimeData().hasUrls():
@@ -156,23 +145,18 @@ class FileListWidget(QListWidget):
 
 
 class PreviewPanel(QFrame):
-    """Right-side panel that shows file previews and merged previews.
-
-    Supports two modes:
-    - Single file: shows one page at a time with page navigation for PDFs.
-    - Merged preview: shows all pages stacked vertically in a scrollable area.
-    """
+    """Right-side panel: single-file preview with page nav, or merged preview."""
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setMinimumWidth(300)
-        self.setStyleSheet("PreviewPanel { background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; }")
-
+        self.setStyleSheet(
+            "PreviewPanel { background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; }"
+        )
         self._current_path: Optional[Path] = None
         self._current_page: int = 0
         self._page_count: int = 0
         self._merged_mode: bool = False
-
         self._build_ui()
         self._show_placeholder()
 
@@ -180,28 +164,24 @@ class PreviewPanel(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
 
-        # ── Header: title + mode label ─────────────────────────
         self._title = QLabel()
         self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._title.setWordWrap(True)
         self._title.setStyleSheet("font-weight: bold; padding: 4px;")
         layout.addWidget(self._title)
 
-        # ── Scroll area for preview image(s) ───────────────────
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         layout.addWidget(self._scroll, stretch=1)
 
-        # Container inside scroll area (holds one or many page labels)
         self._page_container = QWidget()
         self._page_layout = QVBoxLayout(self._page_container)
         self._page_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         self._page_layout.setSpacing(12)
         self._scroll.setWidget(self._page_container)
 
-        # ── Page navigation bar ────────────────────────────────
         nav = QHBoxLayout()
         layout.addLayout(nav)
 
@@ -220,7 +200,6 @@ class PreviewPanel(QFrame):
     # ── Public API ─────────────────────────────────────────────
 
     def show_file(self, path: Path) -> None:
-        """Show a single-file preview with page navigation."""
         self._merged_mode = False
         self._current_path = path
         self._current_page = 0
@@ -230,7 +209,6 @@ class PreviewPanel(QFrame):
         self._update_nav()
 
     def show_merged(self, entries: List[FileEntry]) -> None:
-        """Show a merged preview of all included files, all pages stacked."""
         self._merged_mode = True
         self._current_path = None
 
@@ -245,16 +223,15 @@ class PreviewPanel(QFrame):
         pixmaps = MergeService.render_merged_preview(
             entries, max_width=self._preview_width(), max_height=800
         )
-
         if not pixmaps:
             self._show_placeholder("Could not render merged preview.")
             return
 
         for i, pix in enumerate(pixmaps):
-            page_label = QLabel()
-            page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            page_label.setPixmap(pix)
-            self._page_layout.addWidget(page_label)
+            img_label = QLabel()
+            img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            img_label.setPixmap(pix)
+            self._page_layout.addWidget(img_label)
 
             num_label = QLabel(f"— Page {i + 1} —")
             num_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -268,28 +245,23 @@ class PreviewPanel(QFrame):
         self._btn_next.setVisible(False)
 
     def show_placeholder(self, text: str = "Select a file to preview") -> None:
-        """Public wrapper for the placeholder state."""
         self._show_placeholder(text)
 
-    # ── Internal rendering ─────────────────────────────────────
+    # ── Internal ───────────────────────────────────────────────
 
     def _render_single_page(self) -> None:
-        """Render the current page of the current file."""
         self._clear_pages()
-
         if self._current_path is None:
             return
 
         pix = MergeService.render_preview(
-            self._current_path,
-            page=self._current_page,
-            max_width=self._preview_width(),
-            max_height=800,
+            self._current_path, page=self._current_page,
+            max_width=self._preview_width(), max_height=800,
         )
-
         if pix is None:
             err = QLabel("Could not render this file.")
             err.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            err.setStyleSheet("color: #c00; padding: 20px;")
             self._page_layout.addWidget(err)
             return
 
@@ -299,7 +271,6 @@ class PreviewPanel(QFrame):
         self._page_layout.addWidget(img_label)
 
     def _show_placeholder(self, text: str = "Select a file to preview") -> None:
-        """Reset to placeholder state."""
         self._merged_mode = False
         self._current_path = None
         self._current_page = 0
@@ -317,29 +288,22 @@ class PreviewPanel(QFrame):
         self._page_label.setText("")
 
     def _clear_pages(self) -> None:
-        """Remove all widgets from the page container."""
         while self._page_layout.count():
             child = self._page_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
 
     def _preview_width(self) -> int:
-        """Available width for rendering, accounting for margins and scrollbar."""
         return max(self._scroll.viewport().width() - 20, 200)
 
-    # ── Page navigation ────────────────────────────────────────
-
     def _update_nav(self) -> None:
-        """Update navigation buttons and page label for single-file mode."""
         if self._merged_mode:
             return
-
         has_pages = self._page_count > 1
         self._btn_prev.setVisible(has_pages)
         self._btn_next.setVisible(has_pages)
         self._btn_prev.setEnabled(self._current_page > 0)
         self._btn_next.setEnabled(self._current_page < self._page_count - 1)
-
         if has_pages:
             self._page_label.setText(f"Page {self._current_page + 1} of {self._page_count}")
         elif self._page_count == 1:
@@ -372,20 +336,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("PDFJoiner")
         self.setMinimumSize(900, 600)
-
-        # Accept drops on the main window too (for dropping on empty areas)
         self.setAcceptDrops(True)
 
-        # ── Model ──────────────────────────────────────────────
         self._model = ProjectModel(self)
         self._model.list_changed.connect(self._on_list_changed)
 
-        # ── Build UI ───────────────────────────────────────────
         self._build_toolbar()
         self._build_central()
         self._build_statusbar()
-
-        # Initial state
         self._update_status()
 
     # ══════════════════════════════════════════════════════════
@@ -418,6 +376,12 @@ class MainWindow(QMainWindow):
         self._act_remove.triggered.connect(self._on_remove)
         tb.addAction(self._act_remove)
 
+        self._act_clear = QAction("Clear All", self)
+        self._act_clear.setShortcut(QKeySequence("Ctrl+L"))
+        self._act_clear.setToolTip("Remove all files from list (Ctrl+L)")
+        self._act_clear.triggered.connect(self._on_clear)
+        tb.addAction(self._act_clear)
+
         tb.addSeparator()
 
         self._act_move_up = QAction("▲ Up", self)
@@ -432,13 +396,26 @@ class MainWindow(QMainWindow):
         self._act_move_down.triggered.connect(self._on_move_down)
         tb.addAction(self._act_move_down)
 
+        tb.addSeparator()
+
+        self._act_about = QAction("About", self)
+        self._act_about.setShortcut(QKeySequence("F1"))
+        self._act_about.setToolTip("About PDFJoiner (F1)")
+        self._act_about.triggered.connect(self._on_about)
+        tb.addAction(self._act_about)
+
+        # Quit shortcut (no toolbar button — just the keyboard shortcut)
+        act_quit = QAction("Quit", self)
+        act_quit.setShortcut(QKeySequence("Ctrl+Q"))
+        act_quit.triggered.connect(self.close)
+        self.addAction(act_quit)
+
     def _build_central(self) -> None:
         central = QWidget()
         self.setCentralWidget(central)
         root_layout = QVBoxLayout(central)
         root_layout.setContentsMargins(8, 8, 8, 8)
 
-        # ── Splitter: file list (left) | preview (right) ──
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
         root_layout.addWidget(self._splitter, stretch=1)
 
@@ -467,7 +444,7 @@ class MainWindow(QMainWindow):
 
         self._splitter.setSizes([400, 500])
 
-        # ── Bottom bar: output name + preview merged + save ────
+        # Bottom bar
         bottom = QHBoxLayout()
         root_layout.addLayout(bottom)
 
@@ -494,11 +471,10 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self._statusbar)
 
     # ══════════════════════════════════════════════════════════
-    # OS drag-and-drop on the main window
+    # OS drag-and-drop on main window
     # ══════════════════════════════════════════════════════════
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
-        """Accept file drops anywhere on the window."""
         if _has_acceptable_files(event):
             event.acceptProposedAction()
         else:
@@ -511,18 +487,16 @@ class MainWindow(QMainWindow):
             event.ignore()
 
     def dropEvent(self, event: QDropEvent) -> None:
-        """Handle files dropped on areas outside the file list."""
         paths = _paths_from_mime(event)
         if paths:
             event.acceptProposedAction()
             self._add_dropped_paths(paths)
 
     # ══════════════════════════════════════════════════════════
-    # File list synchronisation
+    # File list sync
     # ══════════════════════════════════════════════════════════
 
     def _on_list_changed(self) -> None:
-        """Rebuild the QListWidget from the model."""
         current_row = self._file_list.currentRow()
 
         self._file_list.blockSignals(True)
@@ -541,7 +515,6 @@ class MainWindow(QMainWindow):
 
         self._file_list.blockSignals(False)
 
-        # Restore selection
         if 0 <= current_row < self._file_list.count():
             self._file_list.setCurrentRow(current_row)
         elif self._file_list.count() > 0:
@@ -550,7 +523,6 @@ class MainWindow(QMainWindow):
         self._update_status()
 
     def _format_entry(self, entry: FileEntry) -> str:
-        """Format display text for a file entry."""
         suffix = entry.path.suffix.upper().lstrip(".")
         if entry.is_pdf:
             pages = MergeService.get_page_count(entry.path)
@@ -562,7 +534,7 @@ class MainWindow(QMainWindow):
         included = len(self._model.included_entries())
         if total == 0:
             self._statusbar.showMessage(
-                "No files added. Use 'Add Files', 'Add Folder', or drag and drop files to begin."
+                "No files added. Use 'Add Files', 'Add Folder', or drag and drop to begin."
             )
         else:
             self._statusbar.showMessage(f"{total} file(s) — {included} included for merge")
@@ -572,9 +544,7 @@ class MainWindow(QMainWindow):
     # ══════════════════════════════════════════════════════════
 
     def _on_add_files(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(
-            self, "Add Files", "", _file_filter()
-        )
+        paths, _ = QFileDialog.getOpenFileNames(self, "Add Files", "", _file_filter())
         if paths:
             added = self._model.add_files([Path(p) for p in paths])
             if added == 0:
@@ -594,6 +564,18 @@ class MainWindow(QMainWindow):
             if self._file_list.currentRow() < 0:
                 self._preview.show_placeholder()
 
+    def _on_clear(self) -> None:
+        if len(self._model) == 0:
+            return
+        reply = QMessageBox.question(
+            self, "Clear all files",
+            f"Remove all {len(self._model)} file(s) from the list?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._model.clear()
+            self._preview.show_placeholder()
+
     def _on_move_up(self) -> None:
         row = self._file_list.currentRow()
         if row > 0:
@@ -611,16 +593,13 @@ class MainWindow(QMainWindow):
     # ══════════════════════════════════════════════════════════
 
     def _on_drag_reorder(self, old_row: int, new_row: int) -> None:
-        """Handle internal drag reorder from the file list."""
         self._model.move(old_row, new_row)
         self._file_list.setCurrentRow(new_row)
 
     def _on_external_drop(self, paths: list) -> None:
-        """Handle files/folders dropped from the OS onto the file list."""
         self._add_dropped_paths(paths)
 
     def _add_dropped_paths(self, paths: List[Path]) -> None:
-        """Process a list of dropped paths — files are added directly, folders are scanned."""
         total_added = 0
         for p in paths:
             p = Path(p)
@@ -628,18 +607,16 @@ class MainWindow(QMainWindow):
                 total_added += self._model.add_folder(p)
             elif p.is_file():
                 total_added += self._model.add_files([p])
-
         if total_added > 0:
             self._statusbar.showMessage(f"Added {total_added} file(s) via drag and drop.", 3000)
         elif paths:
             self._statusbar.showMessage("No supported files found in dropped items.", 3000)
 
     # ══════════════════════════════════════════════════════════
-    # Checkbox handling
+    # Checkbox
     # ══════════════════════════════════════════════════════════
 
     def _on_item_checked(self, item: QListWidgetItem) -> None:
-        """Sync checkbox state back to the model."""
         row = self._file_list.row(item)
         if row < 0 or row >= len(self._model):
             return
@@ -651,22 +628,23 @@ class MainWindow(QMainWindow):
     # ══════════════════════════════════════════════════════════
 
     def _on_selection_changed(self, row: int) -> None:
-        """Show preview of the selected file."""
         if 0 <= row < len(self._model):
-            entry = self._model[row]
-            self._preview.show_file(entry.path)
+            self._preview.show_file(self._model[row].path)
         else:
             self._preview.show_placeholder()
 
     def _on_preview_merged(self) -> None:
-        """Show a preview of the merged output."""
         included = self._model.included_entries()
         if not included:
             QMessageBox.information(self, "Nothing to preview", "No files are included for merging.")
             return
-        self._statusbar.showMessage("Rendering merged preview…")
-        self._preview.show_merged(self._model.entries)
-        self._statusbar.showMessage(f"Merged preview: {len(included)} file(s)", 3000)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            self._statusbar.showMessage("Rendering merged preview…")
+            self._preview.show_merged(self._model.entries)
+            self._statusbar.showMessage(f"Merged preview: {len(included)} file(s)", 3000)
+        finally:
+            QApplication.restoreOverrideCursor()
 
     # ══════════════════════════════════════════════════════════
     # Save / merge
@@ -684,14 +662,43 @@ class MainWindow(QMainWindow):
         if not name.lower().endswith(".pdf"):
             name += ".pdf"
 
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save Merged PDF", name, "PDF files (*.pdf)"
-        )
+        path, _ = QFileDialog.getSaveFileName(self, "Save Merged PDF", name, "PDF files (*.pdf)")
         if not path:
             return
 
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            total = MergeService.merge(self._model.entries, Path(path))
-            self._statusbar.showMessage(f"Saved {total} page(s) to {Path(path).name}", 5000)
+            result = MergeService.merge(self._model.entries, Path(path))
         except Exception as exc:
+            QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Merge failed", str(exc))
+            return
+        QApplication.restoreOverrideCursor()
+
+        msg = f"Saved {result.page_count} page(s) to {Path(path).name}"
+        if result.has_warnings:
+            msg += f"  ({len(result.skipped)} file(s) skipped)"
+            details = "The following files could not be processed:\n\n" + "\n".join(result.skipped)
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setWindowTitle("Merge completed with warnings")
+            box.setText(msg)
+            box.setDetailedText(details)
+            box.exec()
+        else:
+            self._statusbar.showMessage(msg, 5000)
+
+    # ══════════════════════════════════════════════════════════
+    # About
+    # ══════════════════════════════════════════════════════════
+
+    def _on_about(self) -> None:
+        QMessageBox.about(
+            self,
+            "About PDFJoiner",
+            f"<h3>PDFJoiner v{__version__}</h3>"
+            f"<p>A cross-platform tool for joining PDFs and images into a single PDF.</p>"
+            f"<p>Built with PySide6 (Qt) and PyMuPDF.</p>"
+            f"<p>License: MIT</p>"
+            f"<p><a href='https://github.com/youruser/PDFJoiner'>GitHub</a></p>",
+        )
