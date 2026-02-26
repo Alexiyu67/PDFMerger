@@ -70,7 +70,14 @@ jobs:
 
       - name: Verify binary exists
         run: |
-          ls -la ${{ matrix.binary }} || dir ${{ matrix.binary }}
+          Test-Path '${{ matrix.binary }}' -PathType Leaf
+          Get-Item '${{ matrix.binary }}'
+        if: runner.os == 'Windows'
+        shell: pwsh
+
+      - name: Verify binary exists
+        run: ls -la '${{ matrix.binary }}'
+        if: runner.os != 'Windows'
 
       - name: Package
         run: ${{ matrix.package_cmd }}
