@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QAction, QColor, QKeySequence, QPixmap
+from PySide6.QtCore import Qt, QSize, QUrl, Signal
+from PySide6.QtGui import QAction, QColor, QDragEnterEvent, QDragMoveEvent, QDropEvent, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pdfjoiner.model import SUPPORTED_EXTENSIONS, FileEntry, ProjectModel
+from pdfjoiner.model import SUPPORTED_EXTENSIONS, FileEntry, ProjectModel, is_supported
 from pdfjoiner.service import MergeService
 
 
@@ -35,6 +35,119 @@ def _file_filter() -> str:
     """Build a file dialog filter string from supported extensions."""
     exts = " ".join(f"*{e}" for e in sorted(SUPPORTED_EXTENSIONS))
     return f"Supported files ({exts});;PDF files (*.pdf);;Images (*.jpg *.jpeg *.png *.bmp *.tiff *.tif);;All files (*)"
+
+
+def _paths_from_mime(event) -> List[Path]:
+    """Extract file/folder paths from a drag-and-drop mime payload."""
+    paths: List[Path] = []
+    if event.mimeData().hasUrls():
+        for url in event.mimeData().urls():
+            if url.isLocalFile():
+                paths.append(Path(url.toLocalFile()))
+    return paths
+
+
+def _has_acceptable_files(event) -> bool:
+    """Return True if the drag payload contains at least one local file/folder."""
+    if not event.mimeData().hasUrls():
+        return False
+    for url in event.mimeData().urls():
+        if url.isLocalFile():
+            p = Path(url.toLocalFile())
+            if p.is_dir() or (p.is_file() and is_supported(p)):
+                return True
+    return False
+
+
+# ══════════════════════════════════════════════════════════════
+# File list with drag-and-drop support
+# ══════════════════════════════════════════════════════════════
+
+
+class FileListWidget(QListWidget):
+    """QListWidget subclass that supports:
+
+    - Internal drag-and-drop reordering (emits ``row_moved``)
+    - External OS file/folder drops (emits ``files_dropped``)
+    """
+
+    # Internal reorder: (old_index, new_index)
+    row_moved = Signal(int, int)
+
+    # External drop: list of Path objects
+    files_dropped = Signal(list)
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+
+        # Enable internal drag reordering
+        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+
+        # Also accept external drops
+        self.setAcceptDrops(True)
+
+        self._drag_start_row: int = -1
+
+    # ── Internal reorder tracking ──────────────────────────────
+
+    def startDrag(self, supportedActions) -> None:
+        """Record which row is being dragged before Qt moves it."""
+        self._drag_start_row = self.currentRow()
+        super().startDrag(supportedActions)
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        """Handle both internal reorder and external file drops."""
+
+        # External drop — files from OS
+        if event.source() is not self and event.mimeData().hasUrls():
+            event.setDropAction(Qt.DropAction.CopyAction)
+            event.accept()
+            paths = _paths_from_mime(event)
+            if paths:
+                self.files_dropped.emit(paths)
+            return
+
+        # Internal reorder
+        if event.source() is self and self._drag_start_row >= 0:
+            # Figure out the target row from drop position
+            target_item = self.itemAt(event.position().toPoint())
+            if target_item is not None:
+                target_row = self.row(target_item)
+            else:
+                # Dropped below last item
+                target_row = self.count() - 1
+
+            old_row = self._drag_start_row
+            self._drag_start_row = -1
+
+            if old_row != target_row:
+                # Don't let QListWidget do its own move — we handle it via model
+                event.ignore()
+                self.row_moved.emit(old_row, target_row)
+                return
+
+        # Fallback
+        super().dropEvent(event)
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        """Accept drags from both internal and external sources."""
+        if event.source() is self:
+            # Internal reorder
+            event.accept()
+        elif _has_acceptable_files(event):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        """Keep accepting during drag movement."""
+        if event.source() is self:
+            event.accept()
+        elif event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
 
 # ══════════════════════════════════════════════════════════════
@@ -143,7 +256,6 @@ class PreviewPanel(QFrame):
             page_label.setPixmap(pix)
             self._page_layout.addWidget(page_label)
 
-            # Page number label
             num_label = QLabel(f"— Page {i + 1} —")
             num_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             num_label.setStyleSheet("color: #888; font-size: 11px;")
@@ -261,6 +373,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("PDFJoiner")
         self.setMinimumSize(900, 600)
 
+        # Accept drops on the main window too (for dropping on empty areas)
+        self.setAcceptDrops(True)
+
         # ── Model ──────────────────────────────────────────────
         self._model = ProjectModel(self)
         self._model.list_changed.connect(self._on_list_changed)
@@ -335,11 +450,13 @@ class MainWindow(QMainWindow):
         list_label = QLabel("Files to merge:")
         left_layout.addWidget(list_label)
 
-        self._file_list = QListWidget()
+        self._file_list = FileListWidget()
         self._file_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._file_list.setAlternatingRowColors(True)
         self._file_list.itemChanged.connect(self._on_item_checked)
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
+        self._file_list.row_moved.connect(self._on_drag_reorder)
+        self._file_list.files_dropped.connect(self._on_external_drop)
         left_layout.addWidget(self._file_list)
 
         self._splitter.addWidget(left)
@@ -375,6 +492,30 @@ class MainWindow(QMainWindow):
     def _build_statusbar(self) -> None:
         self._statusbar = QStatusBar()
         self.setStatusBar(self._statusbar)
+
+    # ══════════════════════════════════════════════════════════
+    # OS drag-and-drop on the main window
+    # ══════════════════════════════════════════════════════════
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        """Accept file drops anywhere on the window."""
+        if _has_acceptable_files(event):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        """Handle files dropped on areas outside the file list."""
+        paths = _paths_from_mime(event)
+        if paths:
+            event.acceptProposedAction()
+            self._add_dropped_paths(paths)
 
     # ══════════════════════════════════════════════════════════
     # File list synchronisation
@@ -420,7 +561,9 @@ class MainWindow(QMainWindow):
         total = len(self._model)
         included = len(self._model.included_entries())
         if total == 0:
-            self._statusbar.showMessage("No files added. Use 'Add Files' or 'Add Folder' to begin.")
+            self._statusbar.showMessage(
+                "No files added. Use 'Add Files', 'Add Folder', or drag and drop files to begin."
+            )
         else:
             self._statusbar.showMessage(f"{total} file(s) — {included} included for merge")
 
@@ -448,7 +591,6 @@ class MainWindow(QMainWindow):
         indices = sorted(set(idx.row() for idx in self._file_list.selectedIndexes()), reverse=True)
         if indices:
             self._model.remove(indices)
-            # Reset preview if we removed the previewed file
             if self._file_list.currentRow() < 0:
                 self._preview.show_placeholder()
 
@@ -463,6 +605,34 @@ class MainWindow(QMainWindow):
         if 0 <= row < len(self._model) - 1:
             self._model.move_down(row)
             self._file_list.setCurrentRow(row + 1)
+
+    # ══════════════════════════════════════════════════════════
+    # Drag-and-drop handlers
+    # ══════════════════════════════════════════════════════════
+
+    def _on_drag_reorder(self, old_row: int, new_row: int) -> None:
+        """Handle internal drag reorder from the file list."""
+        self._model.move(old_row, new_row)
+        self._file_list.setCurrentRow(new_row)
+
+    def _on_external_drop(self, paths: list) -> None:
+        """Handle files/folders dropped from the OS onto the file list."""
+        self._add_dropped_paths(paths)
+
+    def _add_dropped_paths(self, paths: List[Path]) -> None:
+        """Process a list of dropped paths — files are added directly, folders are scanned."""
+        total_added = 0
+        for p in paths:
+            p = Path(p)
+            if p.is_dir():
+                total_added += self._model.add_folder(p)
+            elif p.is_file():
+                total_added += self._model.add_files([p])
+
+        if total_added > 0:
+            self._statusbar.showMessage(f"Added {total_added} file(s) via drag and drop.", 3000)
+        elif paths:
+            self._statusbar.showMessage("No supported files found in dropped items.", 3000)
 
     # ══════════════════════════════════════════════════════════
     # Checkbox handling
