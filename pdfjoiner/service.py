@@ -6,6 +6,7 @@ an image is simply opened as a single-page document.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -13,7 +14,7 @@ from typing import List, Optional
 import fitz  # PyMuPDF
 from PySide6.QtGui import QImage, QPixmap
 
-from pdfjoiner.model import FileEntry
+from pdfjoiner.model import FileEntry, OutputOptions, PageNumberOptions, WatermarkOptions
 
 
 def _open_document(path: Path) -> fitz.Document:
@@ -45,6 +46,87 @@ def _page_to_pixmap(
     # Convert fitz Pixmap → QImage → QPixmap
     qimg = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format.Format_RGB888)
     return QPixmap.fromImage(qimg)
+
+
+# ── Post-merge page stamping ──────────────────────────────────
+
+
+def _apply_page_numbers(doc: fitz.Document, opts: PageNumberOptions) -> None:
+    """Stamp page numbers onto every page of the document."""
+    if not opts.enabled:
+        return
+
+    total = doc.page_count
+
+    for i, page in enumerate(doc):
+        number = opts.start + i
+        text = opts.format.replace("{n}", str(number)).replace("{total}", str(total))
+
+        rect = page.rect
+        margin = opts.margin
+        font_size = opts.font_size
+
+        # Calculate insertion point based on position
+        pos = opts.position
+        if "bottom" in pos:
+            y = rect.height - margin
+        else:  # top
+            y = margin + font_size
+
+        if "left" in pos:
+            x = margin
+            align = fitz.TEXT_ALIGN_LEFT
+        elif "right" in pos:
+            x = rect.width - margin
+            align = fitz.TEXT_ALIGN_RIGHT
+        else:  # center
+            x = rect.width / 2
+            align = fitz.TEXT_ALIGN_CENTER
+
+        # Use a text writer for proper alignment
+        tw = fitz.TextWriter(page.rect)
+        font = fitz.Font("helv")
+
+        # For center/right alignment, measure text width and adjust x
+        text_width = font.text_length(text, fontsize=font_size)
+        if align == fitz.TEXT_ALIGN_CENTER:
+            x -= text_width / 2
+        elif align == fitz.TEXT_ALIGN_RIGHT:
+            x -= text_width
+
+        tw.append((x, y), text, font=font, fontsize=font_size)
+        tw.write_text(page, color=opts.color)
+
+
+def _apply_watermark(doc: fitz.Document, opts: WatermarkOptions) -> None:
+    """Stamp diagonal watermark text onto every page of the document."""
+    if not opts.enabled or not opts.text.strip():
+        return
+
+    for page in doc:
+        rect = page.rect
+        center_x = rect.width / 2
+        center_y = rect.height / 2
+
+        # Create a temporary text to measure its width
+        font = fitz.Font("helv")
+        text_width = font.text_length(opts.text, fontsize=opts.font_size)
+
+        # Build a rotation matrix: translate to center, rotate, translate back
+        angle_rad = math.radians(opts.angle)
+        mat = (
+            fitz.Matrix(1, 0, 0, 1, center_x, center_y)  # translate to center
+            * fitz.Matrix(math.cos(angle_rad), math.sin(angle_rad),
+                          -math.sin(angle_rad), math.cos(angle_rad), 0, 0)  # rotate
+            * fitz.Matrix(1, 0, 0, 1, -text_width / 2, opts.font_size / 3)  # center text
+        )
+
+        tw = fitz.TextWriter(page.rect, opacity=opts.opacity)
+        tw.append((0, 0), opts.text, font=font, fontsize=opts.font_size)
+        tw.write_text(page, morph=(fitz.Point(0, 0), mat), color=opts.color)
+
+
+# ── Result dataclass ───────────────────────────────────────────
 
 
 @dataclass
@@ -143,15 +225,21 @@ class MergeService:
     # ── Merge to PDF ───────────────────────────────────────────
 
     @staticmethod
-    def merge(entries: List[FileEntry], output: Path) -> MergeResult:
+    def merge(
+        entries: List[FileEntry],
+        output: Path,
+        options: Optional[OutputOptions] = None,
+    ) -> MergeResult:
         """Merge included entries into a single PDF.
 
         PDFs are inserted page-by-page. Images are inserted as full pages
-        sized to their native dimensions.
+        sized to their native dimensions. Output options (page numbers,
+        watermark) are applied after assembly.
 
         Args:
             entries: The full file list (only included=True are used).
             output: Destination path for the merged PDF.
+            options: Optional output settings for page numbers / watermark.
 
         Returns:
             MergeResult with page count and list of skipped filenames.
@@ -193,6 +281,18 @@ class MergeService:
                 "All files failed to process. No output generated.\n\n"
                 + "\n".join(result.skipped)
             )
+
+        # ── Apply output options ───────────────────────────────
+        if options is not None:
+            try:
+                _apply_watermark(output_doc, options.watermark)
+            except Exception as exc:
+                result.skipped.append(f"Watermark: {exc}")
+
+            try:
+                _apply_page_numbers(output_doc, options.page_numbers)
+            except Exception as exc:
+                result.skipped.append(f"Page numbers: {exc}")
 
         result.page_count = output_doc.page_count
         output_doc.save(str(output))

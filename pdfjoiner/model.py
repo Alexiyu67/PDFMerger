@@ -18,6 +18,48 @@ def is_supported(path: Path) -> bool:
     return path.suffix.lower() in SUPPORTED_EXTENSIONS
 
 
+# ── Output options (applied at merge time) ─────────────────────
+
+
+@dataclass
+class PageNumberOptions:
+    """Settings for page numbering on the merged output."""
+
+    enabled: bool = False
+    position: str = "bottom-center"  # bottom-center, bottom-left, bottom-right, top-center, top-left, top-right
+    format: str = "{n} / {total}"    # {n} = page number, {total} = total pages
+    start: int = 1
+    font_size: float = 10.0
+    color: tuple = (0.0, 0.0, 0.0)   # RGB 0–1
+    margin: float = 36.0             # points from page edge
+
+
+@dataclass
+class WatermarkOptions:
+    """Settings for watermark text on the merged output."""
+
+    enabled: bool = False
+    text: str = "DRAFT"
+    opacity: float = 0.15
+    angle: float = 45.0              # degrees, counter-clockwise
+    font_size: float = 60.0
+    color: tuple = (0.5, 0.5, 0.5)   # RGB 0–1
+
+
+@dataclass
+class OutputOptions:
+    """All merge-time output options bundled together."""
+
+    page_numbers: PageNumberOptions = None  # type: ignore[assignment]
+    watermark: WatermarkOptions = None      # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.page_numbers is None:
+            self.page_numbers = PageNumberOptions()
+        if self.watermark is None:
+            self.watermark = WatermarkOptions()
+
+
 @dataclass
 class FileEntry:
     """A single file in the merge list."""

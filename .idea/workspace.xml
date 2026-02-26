@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="feat: add drag-and-drop reordering and OS file drops&#10;&#10;- FileListWidget subclass with internal drag reorder via model&#10;- External file/folder drops from OS file manager onto file list&#10;- Main window also accepts drops anywhere (toolbar, preview, etc.)&#10;- Folders recursively scanned, unsupported files silently skipped&#10;- Status bar hints at drag-and-drop in empty state" />
+    <list default="true" id="7b4436f4-d9df-482e-b619-5c5bbc576ceb" name="Changes" comment="feat: visual insertion gap during drag-and-drop reordering&#10;&#10;- Custom _DropIndicatorDelegate inflates sizeHint to open a gap&#10;- Blue-tinted insertion zone with horizontal line and dot endpoints&#10;- Gap tracks cursor position with top/bottom half hit-testing&#10;- Hides gap when hovering over dragged item's own position&#10;- Gap also shown for external OS file drops&#10;- Disables Qt's built-in drop indicator line" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -66,7 +66,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1772107516868</updated>
-      <workItem from="1772107517890" duration="1244000" />
+      <workItem from="1772107517890" duration="1868000" />
     </task>
     <task id="LOCAL-00001" summary="feat: project scaffolding and minimal window launch&#10;&#10;- Create pdfjoiner package with __init__, model, service, view stubs&#10;- Add main.py entry point with PySide6 QApplication bootstrap&#10;- Add pyproject.toml with project metadata and dependencies&#10;- Add requirements.txt (PySide6, PyMuPDF)&#10;- Add .gitignore for Python/IDE/OS artifacts&#10;- Minimal MainWindow launches at 900x600 with placeholder label">
       <option name="closed" value="true" />
@@ -116,7 +116,23 @@
       <option name="project" value="LOCAL" />
       <updated>1772108770881</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="feat: add drag-and-drop reordering and OS file drops&#10;&#10;- FileListWidget subclass with internal drag reorder via model&#10;- External file/folder drops from OS file manager onto file list&#10;- Main window also accepts drops anywhere (toolbar, preview, etc.)&#10;- Folders recursively scanned, unsupported files silently skipped&#10;- Status bar hints at drag-and-drop in empty state">
+      <option name="closed" value="true" />
+      <created>1772109064731</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1772109064731</updated>
+    </task>
+    <task id="LOCAL-00008" summary="feat: visual insertion gap during drag-and-drop reordering&#10;&#10;- Custom _DropIndicatorDelegate inflates sizeHint to open a gap&#10;- Blue-tinted insertion zone with horizontal line and dot endpoints&#10;- Gap tracks cursor position with top/bottom half hit-testing&#10;- Hides gap when hovering over dragged item's own position&#10;- Gap also shown for external OS file drops&#10;- Disables Qt's built-in drop indicator line">
+      <option name="closed" value="true" />
+      <created>1772109392330</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1772109392330</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -129,6 +145,7 @@
     <MESSAGE value="feat: build main window layout with file list and merge controls&#10;&#10;- Toolbar: Add Files, Add Folder, Remove, Move Up/Down with shortcuts&#10;- File list with checkboxes for include/exclude, grayed-out styling&#10;- Multi-select support for bulk removal&#10;- Output filename field + Save Merged PDF button with save dialog&#10;- Status bar showing file count and included count&#10;- Preview placeholder panel ready for Step 5&#10;- Remove smoke test from main.py — UI is now the interface" />
     <MESSAGE value="feat: add preview panel with page navigation and merged preview&#10;&#10;- PreviewPanel widget with single-file and merged preview modes&#10;- Single-file: renders current page, Prev/Next navigation for PDFs&#10;- Merged: renders all included pages stacked vertically, scrollable&#10;- Preview Merged button in bottom bar&#10;- Auto-preview on file list selection change" />
     <MESSAGE value="feat: add drag-and-drop reordering and OS file drops&#10;&#10;- FileListWidget subclass with internal drag reorder via model&#10;- External file/folder drops from OS file manager onto file list&#10;- Main window also accepts drops anywhere (toolbar, preview, etc.)&#10;- Folders recursively scanned, unsupported files silently skipped&#10;- Status bar hints at drag-and-drop in empty state" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: add drag-and-drop reordering and OS file drops&#10;&#10;- FileListWidget subclass with internal drag reorder via model&#10;- External file/folder drops from OS file manager onto file list&#10;- Main window also accepts drops anywhere (toolbar, preview, etc.)&#10;- Folders recursively scanned, unsupported files silently skipped&#10;- Status bar hints at drag-and-drop in empty state" />
+    <MESSAGE value="feat: visual insertion gap during drag-and-drop reordering&#10;&#10;- Custom _DropIndicatorDelegate inflates sizeHint to open a gap&#10;- Blue-tinted insertion zone with horizontal line and dot endpoints&#10;- Gap tracks cursor position with top/bottom half hit-testing&#10;- Hides gap when hovering over dragged item's own position&#10;- Gap also shown for external OS file drops&#10;- Disables Qt's built-in drop indicator line" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: visual insertion gap during drag-and-drop reordering&#10;&#10;- Custom _DropIndicatorDelegate inflates sizeHint to open a gap&#10;- Blue-tinted insertion zone with horizontal line and dot endpoints&#10;- Gap tracks cursor position with top/bottom half hit-testing&#10;- Hides gap when hovering over dragged item's own position&#10;- Gap also shown for external OS file drops&#10;- Disables Qt's built-in drop indicator line" />
   </component>
 </project>

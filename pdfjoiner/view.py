@@ -20,8 +20,15 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
+    QFormLayout,
     QFrame,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -31,17 +38,28 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSlider,
+    QSpinBox,
     QSplitter,
     QStatusBar,
     QStyledItemDelegate,
     QStyleOptionViewItem,
+    QTabWidget,
     QToolBar,
     QVBoxLayout,
     QWidget,
 )
 
 from pdfjoiner import __version__
-from pdfjoiner.model import SUPPORTED_EXTENSIONS, FileEntry, ProjectModel, is_supported
+from pdfjoiner.model import (
+    SUPPORTED_EXTENSIONS,
+    FileEntry,
+    OutputOptions,
+    PageNumberOptions,
+    ProjectModel,
+    WatermarkOptions,
+    is_supported,
+)
 from pdfjoiner.service import MergeService
 
 
@@ -476,6 +494,209 @@ class PreviewPanel(QFrame):
 
 
 # ══════════════════════════════════════════════════════════════
+# Output options dialog
+# ══════════════════════════════════════════════════════════════
+
+
+class OutputOptionsDialog(QDialog):
+    """Dialog for configuring page numbers and watermark before saving."""
+
+    def __init__(self, options: OutputOptions, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Output Options")
+        self.setMinimumWidth(480)
+        self._options = options
+        self._build_ui()
+        self._load_from_options()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+
+        tabs = QTabWidget()
+        layout.addWidget(tabs)
+
+        # ── Page Numbers tab ───────────────────────────────────
+        pn_tab = QWidget()
+        pn_layout = QVBoxLayout(pn_tab)
+
+        self._pn_enabled = QCheckBox("Add page numbers")
+        pn_layout.addWidget(self._pn_enabled)
+
+        self._pn_group = QGroupBox()
+        self._pn_group.setFlat(True)
+        pn_form = QFormLayout(self._pn_group)
+
+        self._pn_position = QComboBox()
+        self._pn_position.addItems([
+            "Bottom Center", "Bottom Left", "Bottom Right",
+            "Top Center", "Top Left", "Top Right",
+        ])
+        pn_form.addRow("Position:", self._pn_position)
+
+        self._pn_format = QComboBox()
+        self._pn_format.setEditable(True)
+        self._pn_format.addItems([
+            "{n} / {total}",
+            "Page {n} of {total}",
+            "{n}",
+            "Page {n}",
+            "- {n} -",
+        ])
+        pn_form.addRow("Format:", self._pn_format)
+
+        self._pn_start = QSpinBox()
+        self._pn_start.setRange(0, 9999)
+        self._pn_start.setValue(1)
+        pn_form.addRow("Start at:", self._pn_start)
+
+        self._pn_font_size = QDoubleSpinBox()
+        self._pn_font_size.setRange(4.0, 72.0)
+        self._pn_font_size.setValue(10.0)
+        self._pn_font_size.setSuffix(" pt")
+        pn_form.addRow("Font size:", self._pn_font_size)
+
+        self._pn_margin = QDoubleSpinBox()
+        self._pn_margin.setRange(10.0, 200.0)
+        self._pn_margin.setValue(36.0)
+        self._pn_margin.setSuffix(" pt")
+        pn_form.addRow("Margin:", self._pn_margin)
+
+        pn_layout.addWidget(self._pn_group)
+        pn_layout.addStretch()
+        tabs.addTab(pn_tab, "Page Numbers")
+
+        # Wire enable/disable
+        self._pn_enabled.toggled.connect(self._pn_group.setEnabled)
+
+        # ── Watermark tab ──────────────────────────────────────
+        wm_tab = QWidget()
+        wm_layout = QVBoxLayout(wm_tab)
+
+        self._wm_enabled = QCheckBox("Add watermark")
+        wm_layout.addWidget(self._wm_enabled)
+
+        self._wm_group = QGroupBox()
+        self._wm_group.setFlat(True)
+        wm_form = QFormLayout(self._wm_group)
+
+        self._wm_text = QLineEdit()
+        self._wm_text.setPlaceholderText("DRAFT")
+        wm_form.addRow("Text:", self._wm_text)
+
+        self._wm_font_size = QDoubleSpinBox()
+        self._wm_font_size.setRange(8.0, 200.0)
+        self._wm_font_size.setValue(60.0)
+        self._wm_font_size.setSuffix(" pt")
+        wm_form.addRow("Font size:", self._wm_font_size)
+
+        self._wm_angle = QDoubleSpinBox()
+        self._wm_angle.setRange(-180.0, 180.0)
+        self._wm_angle.setValue(45.0)
+        self._wm_angle.setSuffix("°")
+        wm_form.addRow("Angle:", self._wm_angle)
+
+        # Opacity with slider + label
+        opacity_row = QHBoxLayout()
+        self._wm_opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self._wm_opacity_slider.setRange(1, 100)
+        self._wm_opacity_slider.setValue(15)
+        self._wm_opacity_label = QLabel("15%")
+        self._wm_opacity_label.setMinimumWidth(40)
+        self._wm_opacity_slider.valueChanged.connect(
+            lambda v: self._wm_opacity_label.setText(f"{v}%")
+        )
+        opacity_row.addWidget(self._wm_opacity_slider, stretch=1)
+        opacity_row.addWidget(self._wm_opacity_label)
+        wm_form.addRow("Opacity:", opacity_row)
+
+        self._wm_color = QComboBox()
+        self._wm_color.addItems(["Gray", "Red", "Blue", "Green", "Black"])
+        wm_form.addRow("Color:", self._wm_color)
+
+        wm_layout.addWidget(self._wm_group)
+        wm_layout.addStretch()
+        tabs.addTab(wm_tab, "Watermark")
+
+        # Wire enable/disable
+        self._wm_enabled.toggled.connect(self._wm_group.setEnabled)
+
+        # ── Dialog buttons ─────────────────────────────────────
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    # ── Position mapping ───────────────────────────────────────
+
+    _POSITION_MAP = [
+        "bottom-center", "bottom-left", "bottom-right",
+        "top-center", "top-left", "top-right",
+    ]
+
+    _COLOR_MAP = {
+        "Gray": (0.5, 0.5, 0.5),
+        "Red": (0.8, 0.1, 0.1),
+        "Blue": (0.1, 0.1, 0.8),
+        "Green": (0.1, 0.6, 0.1),
+        "Black": (0.0, 0.0, 0.0),
+    }
+
+    # ── Load / save ────────────────────────────────────────────
+
+    def _load_from_options(self) -> None:
+        """Populate UI from the options dataclass."""
+        pn = self._options.page_numbers
+        self._pn_enabled.setChecked(pn.enabled)
+        self._pn_group.setEnabled(pn.enabled)
+        idx = self._POSITION_MAP.index(pn.position) if pn.position in self._POSITION_MAP else 0
+        self._pn_position.setCurrentIndex(idx)
+        self._pn_format.setCurrentText(pn.format)
+        self._pn_start.setValue(pn.start)
+        self._pn_font_size.setValue(pn.font_size)
+        self._pn_margin.setValue(pn.margin)
+
+        wm = self._options.watermark
+        self._wm_enabled.setChecked(wm.enabled)
+        self._wm_group.setEnabled(wm.enabled)
+        self._wm_text.setText(wm.text)
+        self._wm_font_size.setValue(wm.font_size)
+        self._wm_angle.setValue(wm.angle)
+        self._wm_opacity_slider.setValue(int(wm.opacity * 100))
+        # Find color name
+        color_name = "Gray"
+        for name, rgb in self._COLOR_MAP.items():
+            if rgb == wm.color:
+                color_name = name
+                break
+        self._wm_color.setCurrentText(color_name)
+
+    def get_options(self) -> OutputOptions:
+        """Read the UI state into an OutputOptions dataclass."""
+        pn = PageNumberOptions(
+            enabled=self._pn_enabled.isChecked(),
+            position=self._POSITION_MAP[self._pn_position.currentIndex()],
+            format=self._pn_format.currentText(),
+            start=self._pn_start.value(),
+            font_size=self._pn_font_size.value(),
+            margin=self._pn_margin.value(),
+        )
+
+        color_rgb = self._COLOR_MAP.get(self._wm_color.currentText(), (0.5, 0.5, 0.5))
+        wm = WatermarkOptions(
+            enabled=self._wm_enabled.isChecked(),
+            text=self._wm_text.text() or "DRAFT",
+            font_size=self._wm_font_size.value(),
+            angle=self._wm_angle.value(),
+            opacity=self._wm_opacity_slider.value() / 100.0,
+            color=color_rgb,
+        )
+
+        return OutputOptions(page_numbers=pn, watermark=wm)
+
+
+# ══════════════════════════════════════════════════════════════
 # Main window
 # ══════════════════════════════════════════════════════════════
 
@@ -491,6 +712,9 @@ class MainWindow(QMainWindow):
 
         self._model = ProjectModel(self)
         self._model.list_changed.connect(self._on_list_changed)
+
+        # Persistent output options — remembered across saves within a session
+        self._output_options = OutputOptions()
 
         self._build_toolbar()
         self._build_central()
@@ -610,6 +834,11 @@ class MainWindow(QMainWindow):
         self._btn_preview_merged.setToolTip("Preview what the merged PDF will look like")
         self._btn_preview_merged.clicked.connect(self._on_preview_merged)
         bottom.addWidget(self._btn_preview_merged)
+
+        self._btn_options = QPushButton("Options…")
+        self._btn_options.setToolTip("Configure page numbers, watermark, and other output options")
+        self._btn_options.clicked.connect(self._on_output_options)
+        bottom.addWidget(self._btn_options)
 
         self._btn_save = QPushButton("Save Merged PDF")
         self._btn_save.setShortcut(QKeySequence("Ctrl+S"))
@@ -798,6 +1027,17 @@ class MainWindow(QMainWindow):
             QApplication.restoreOverrideCursor()
 
     # ══════════════════════════════════════════════════════════
+    # Output options
+    # ══════════════════════════════════════════════════════════
+
+    def _on_output_options(self) -> None:
+        """Open the output options dialog."""
+        dlg = OutputOptionsDialog(self._output_options, parent=self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._output_options = dlg.get_options()
+            self._statusbar.showMessage("Output options updated.", 3000)
+
+    # ══════════════════════════════════════════════════════════
     # Save / merge
     # ══════════════════════════════════════════════════════════
 
@@ -819,7 +1059,9 @@ class MainWindow(QMainWindow):
 
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            result = MergeService.merge(self._model.entries, Path(path))
+            result = MergeService.merge(
+                self._model.entries, Path(path), options=self._output_options
+            )
         except Exception as exc:
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Merge failed", str(exc))
