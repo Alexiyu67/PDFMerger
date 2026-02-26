@@ -6,29 +6,47 @@ A cross-platform desktop tool for merging PDFs and images into a single PDF.
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
+---
+
+## Download
+
+Pre-built binaries — no Python required. Pick your platform:
+
+| Platform | Link                                                                                                 |
+|----------|------------------------------------------------------------------------------------------------------|
+| **Windows** (10/11, 64-bit) | [⬇ PDFJoiner-Windows.zip](https://gitAlexiyu67<br//PDFJoiner/releases/latest/download/PDFJoiner-Windows.zip)  |
+| **macOS** (Apple Silicon) | [⬇ PDFJoiner-macOS.zip](https://gitAlexiyu67<br//PDFJoiner/releases/latest/download/PDFJoiner-macOS.zip)      |
+| **Linux** (x64, Ubuntu 22.04+) | [⬇ PDFJoiner-Linux.tar.gz](https://gitAlexiyu67<br//PDFJoiner/releases/latest/download/PDFJoiner-Linux.tar.gz) |
+
+> **First time on macOS?** After extracting, right-click → Open to bypass Gatekeeper.
+>
+> **Linux:** Make it executable with `chmod +x PDFJoiner` after extracting.
+
+All releases: [Releases page](https://gitAlexiyu67/PDFJoiner/releases)
+
+---
+
 ## Features
 
-- **Add files** — PDFs and images (JPG, JPEG, PNG, BMP, TIFF)
-- **Add folders** — recursively scan for supported files
-- **Preview** — view individual files with page navigation for multi-page PDFs
-- **Preview merged** — see what the final combined PDF will look like
-- **Reorder** — drag-and-drop or keyboard shortcuts to arrange files
-- **Include/exclude** — uncheck files to exclude them without removing from the list
-- **Drag and drop** — drop files and folders from your OS file manager
+- **Merge PDFs and images** — combine any mix of PDF, JPG, PNG, BMP, and TIFF files
+- **Drag and drop** — drop files and folders straight from your file manager
+- **Live preview** — scroll through all pages, single file or merged result
+- **Reorder** — inline ▲/▼ buttons or drag-and-drop to arrange files
+- **Include / exclude** — uncheck files to skip them without removing from the list
 - **Page numbers** — configurable position, format, font size, and color
-- **Watermark** — diagonal semi-transparent text with adjustable opacity and angle
-- **Text annotations** — click anywhere on the merged preview to place text labels
-- **Name the output** — choose a custom filename for the merged PDF
-- **Cross-platform** — runs on Windows, macOS, and Linux
+- **Watermark** — diagonal semi-transparent text overlay
+- **Text annotations** — click-to-place labels anywhere on the merged preview
+- **Dark mode** — follows your OS theme automatically
+- **Cross-platform** — Windows, macOS, and Linux
 
-## Installation
+---
 
-### From source
+## Build from source
 
-Requires Python 3.10 or later.
+Requires Python 3.10+.
 
 ```bash
-git clone https://github.com/youruser/PDFJoiner.git
+git clone https://github.com/Alexiyu67/PDFJoiner.git
 cd PDFJoiner
 python -m venv .venv
 
@@ -42,51 +60,46 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### Standalone binary
-
-Pre-built binaries are available on the [Releases](https://github.com/youruser/PDFJoiner/releases) page, or you can build your own:
+To build a standalone binary:
 
 ```bash
 pip install pyinstaller
 python build.py
+# output: dist/PDFJoiner.exe (Windows) or dist/PDFJoiner (macOS/Linux)
 ```
 
-The output binary will be in the `dist/` folder.
+---
 
 ## Keyboard shortcuts
 
-| Action               | Shortcut         |
-|----------------------|------------------|
-| Add files/folders    | `Ctrl+O`         |
-| Delete (file or ann.)| `Delete`         |
-| Save merged          | `Ctrl+S`         |
-| Clear list           | `Ctrl+L`         |
-| About                | `F1`             |
-| Quit                 | `Ctrl+Q`         |
+| Action                     | Shortcut   |
+|----------------------------|------------|
+| Add files / folders        | `Ctrl+O`   |
+| Save merged PDF            | `Ctrl+S`   |
+| Delete file or annotation  | `Delete`   |
+| Clear list                 | `Ctrl+L`   |
+| About                      | `F1`       |
+| Quit                       | `Ctrl+Q`   |
+
+---
 
 ## Architecture
 
 ```
-main.py          → Entry point
+main.py              → Entry point
 pdfjoiner/
-├── __init__.py  → Version
-├── model.py     → Data model (FileEntry, ProjectModel, OutputOptions, TextAnnotation)
-├── service.py   → PDF/image rendering and merging (PyMuPDF)
-└── view.py      → Qt UI (MainWindow, PreviewPanel, AnnotatedPageWidget, FileListWidget)
+├── __init__.py      → Version
+├── model.py         → Data model (FileEntry, ProjectModel, OutputOptions)
+├── service.py       → PDF/image rendering and merging (PyMuPDF)
+└── view.py          → Qt UI (MainWindow, PreviewPanel, dialogs)
 ```
-
-**Model–View–Service** separation: the model holds state and emits signals, the view reacts and delegates to stateless service functions. No circular dependencies.
 
 ## Dependencies
 
-| Package  | Purpose                                    | License  |
-|----------|--------------------------------------------|----------|
-| PySide6  | Qt GUI framework (official Python binding)  | LGPL     |
-| PyMuPDF  | PDF & image reading, rendering, merging     | AGPL     |
-
-## Supported file types
-
-PDF, JPG, JPEG, PNG, BMP, TIFF, TIF
+| Package  | Purpose                                    | License |
+|----------|--------------------------------------------|---------|
+| PySide6  | Qt GUI framework (official Python binding) | LGPL    |
+| PyMuPDF  | PDF & image reading, rendering, merging    | AGPL    |
 
 ## License
 

@@ -15,6 +15,7 @@ import sys
 def main() -> None:
     name = "PDFJoiner"
     entry = "main.py"
+    sep = ";" if platform.system() == "Windows" else ":"
 
     args = [
         sys.executable, "-m", "PyInstaller",
@@ -23,8 +24,9 @@ def main() -> None:
         "--windowed",           # no console window on Windows/macOS
         "--noconfirm",          # overwrite previous build without asking
         "--clean",              # clean cache before building
-        "--add-data", "LICENSE:.",
-        "--add-data", "README.md:.",
+        "--add-data", f"LICENSE{sep}.",
+        "--add-data", f"README.md{sep}.",
+        "--add-data", f"MANUAL.md{sep}.",
         entry,
     ]
 

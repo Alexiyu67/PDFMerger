@@ -1,0 +1,106 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:        # allow manual trigger for testing
+
+permissions:
+  contents: write           # needed for creating releases
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: PDFJoiner-Windows
+            binary: dist/PDFJoiner.exe
+            package_cmd: |
+              Compress-Archive -Path dist/PDFJoiner.exe -DestinationPath PDFJoiner-Windows.zip
+            asset: PDFJoiner-Windows.zip
+            shell: pwsh
+
+          - os: macos-latest            # Apple Silicon (M1+)
+            artifact: PDFJoiner-macOS
+            binary: dist/PDFJoiner
+            package_cmd: |
+              cd dist && zip -r ../PDFJoiner-macOS.zip PDFJoiner
+            asset: PDFJoiner-macOS.zip
+            shell: bash
+
+          - os: ubuntu-22.04
+            artifact: PDFJoiner-Linux
+            binary: dist/PDFJoiner
+            package_cmd: |
+              tar -czf PDFJoiner-Linux.tar.gz -C dist PDFJoiner
+            asset: PDFJoiner-Linux.tar.gz
+            shell: bash
+
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0 libxcb-cursor0 libxkbcommon0
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build binary
+        run: python build.py
+
+      - name: Verify binary exists
+        run: |
+          ls -la ${{ matrix.binary }} || dir ${{ matrix.binary }}
+
+      - name: Package
+        run: ${{ matrix.package_cmd }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.asset }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/PDFJoiner-Windows.zip
+            artifacts/PDFJoiner-macOS.zip
+            artifacts/PDFJoiner-Linux.tar.gz
