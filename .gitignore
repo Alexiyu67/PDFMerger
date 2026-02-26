@@ -19,3 +19,6 @@ Thumbs.db
 
 # PyInstaller
 *.spec
+
+# Smoke test output
+_test_merged.pdf
